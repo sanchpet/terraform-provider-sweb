@@ -1,0 +1,30 @@
+[tools]
+go = "1.26"
+golangci-lint = "2"
+pre-commit = "latest"
+terraform = "1.15"
+terraform-docs = "latest"
+
+[tasks.build]
+description = "Build the provider binary"
+run = "go build ./..."
+
+[tasks.test]
+description = "Run the test suite"
+run = "go test ./..."
+
+[tasks.testacc]
+description = "Run acceptance tests (mock HTTP backend)"
+run = "TF_ACC=1 go test ./... -v"
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run"
+
+[tasks.fmt]
+description = "Format Go sources"
+run = "gofmt -w ."
+
+[tasks.ci]
+description = "Everything CI runs"
+depends = ["lint", "test"]

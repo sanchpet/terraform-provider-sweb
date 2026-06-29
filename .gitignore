@@ -1,0 +1,19 @@
+# Binaries
+terraform-provider-sweb
+*.exe
+*.out
+/dist/
+
+# Test / coverage
+*.test
+coverage.out
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Local env
+.env
+*.local
