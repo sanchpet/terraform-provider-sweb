@@ -49,6 +49,11 @@ release:
     name: terraform-provider-sweb
   # Registry ingests the GitHub release; keep it a real (non-draft) release.
   draft: false
+  extra_files:
+    # The registry reads protocol versions from this manifest; without it it
+    # falls back to protocol 5.0 and mishandles a Plugin Framework provider.
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
 
 changelog:
   disable: true
