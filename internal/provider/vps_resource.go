@@ -146,8 +146,9 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 			"name":    schema.StringAttribute{Computed: true, Description: "Effective name reported by the API."},
 			"ip":      schema.StringAttribute{Computed: true, Description: "Primary IP address."},
 			"running": schema.BoolAttribute{Computed: true, Description: "Whether the VPS is running."},
-
-			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{Create: true}),
+		},
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{Create: true}),
 		},
 	}
 }
