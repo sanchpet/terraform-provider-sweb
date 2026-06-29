@@ -60,7 +60,7 @@ output "infra_hub_ip" {
 - `plan` (Number) Ready-made plan id. Mutually exclusive with the configurator (`cpu`/`ram`/`disk`).
 - `ram` (Number) Configurator: RAM in GB. Mutually exclusive with `plan`.
 - `ssh_key` (String) SSH public key id to inject at create. Create-only: not read back from the API.
-- `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
+- `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
 
@@ -71,7 +71,7 @@ output "infra_hub_ip" {
 - `running` (Boolean) Whether the VPS is running.
 - `uid` (String) Stable unique id of the VPS.
 
-<a id="nestedatt--timeouts"></a>
+<a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`
 
 Optional:
