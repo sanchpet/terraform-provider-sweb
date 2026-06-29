@@ -4,6 +4,7 @@ golangci-lint = "2"
 pre-commit = "latest"
 terraform = "1.15"
 terraform-docs = "latest"
+"go:github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs" = "latest"
 
 [tasks.build]
 description = "Build the provider binary"
@@ -24,6 +25,10 @@ run = "golangci-lint run"
 [tasks.fmt]
 description = "Format Go sources"
 run = "gofmt -w ."
+
+[tasks.docs]
+description = "Generate registry docs from the schema + examples"
+run = "tfplugindocs generate --provider-name sweb"
 
 [tasks.ci]
 description = "Everything CI runs"
