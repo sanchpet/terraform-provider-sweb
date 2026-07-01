@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -70,6 +71,11 @@ func (r *vpsResource) Metadata(_ context.Context, req resource.MetadataRequest, 
 func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	replaceInt := []planmodifier.Int64{int64planmodifier.RequiresReplace()}
 	replaceStr := []planmodifier.String{stringplanmodifier.RequiresReplace()}
+	// keep = "reuse the prior state value when the planned value is unknown". For computed
+	// attributes that the only in-place op (rename) does not change, this keeps them out of
+	// the plan (no "known after apply" noise); Read still refreshes them for drift each cycle.
+	keepStr := []planmodifier.String{stringplanmodifier.UseStateForUnknown()}
+	keepBool := []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}
 
 	resp.Schema = schema.Schema{
 		Description: "A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.",
@@ -131,20 +137,26 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 			"id": schema.StringAttribute{
 				Computed:      true,
 				Description:   "Terraform identifier — equals billing_id.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers: keepStr,
 			},
 			"billing_id": schema.StringAttribute{
 				Computed:      true,
 				Description:   "SpaceWeb service id (login_vps_N); the key used for delete and import.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers: keepStr,
 			},
 			"uid": schema.StringAttribute{
-				Computed:    true,
-				Description: "Stable unique id of the VPS.",
+				Computed:      true,
+				Description:   "Stable unique id of the VPS.",
+				PlanModifiers: keepStr,
 			},
-			"name":    schema.StringAttribute{Computed: true, Description: "Effective name reported by the API."},
-			"ip":      schema.StringAttribute{Computed: true, Description: "Primary IP address."},
-			"running": schema.BoolAttribute{Computed: true, Description: "Whether the VPS is running."},
+			// name is NOT kept: it mirrors alias, so a rename legitimately changes it.
+			"name": schema.StringAttribute{Computed: true, Description: "Effective name reported by the API."},
+			"ip":   schema.StringAttribute{Computed: true, Description: "Primary IP address.", PlanModifiers: keepStr},
+			"running": schema.BoolAttribute{
+				Computed:      true,
+				Description:   "Whether the VPS is running.",
+				PlanModifiers: keepBool,
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{Create: true}),
