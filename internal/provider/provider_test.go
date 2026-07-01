@@ -68,8 +68,8 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 			CPU:          2,
 			RAM:          6,
 			DiskGB:       15,
-			PlanID:       strconv.Itoa(p.VPSPlanID),
-			OSDistrID:    p.DistributiveID,
+			PlanID:       sweb.FlexInt(p.VPSPlanID),
+			OSDistrID:    sweb.FlexInt(p.DistributiveID),
 			DatacenterID: strconv.Itoa(p.Datacenter),
 		})
 		result = map[string]bool{"ok": true}
