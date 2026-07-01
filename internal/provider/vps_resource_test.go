@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 // TestAccVPSResource exercises the full Terraform lifecycle against the mock
@@ -35,6 +37,11 @@ func TestAccVPSResource(t *testing.T) {
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction("sweb_vps.test", plancheck.ResourceActionUpdate),
+						// A rename must not churn the stable computed fields: they stay known
+						// (UseStateForUnknown), not "known after apply".
+						plancheck.ExpectKnownValue("sweb_vps.test", tfjsonpath.New("uid"), knownvalue.StringExact("uid-1")),
+						plancheck.ExpectKnownValue("sweb_vps.test", tfjsonpath.New("ip"), knownvalue.StringExact("203.0.113.50")),
+						plancheck.ExpectKnownValue("sweb_vps.test", tfjsonpath.New("running"), knownvalue.Bool(true)),
 					},
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
