@@ -362,8 +362,8 @@ func (r *vpsResource) ImportState(ctx context.Context, req resource.ImportStateR
 	set("name", node.Name)
 	set("ip", node.IP)
 	set("running", node.IsRunning == 1)
-	set("plan", atoiOr(node.PlanID, 0))
-	set("distributive", node.OSDistrID)
+	set("plan", int64(node.PlanID))
+	set("distributive", int64(node.OSDistrID))
 	set("datacenter", atoiOr(node.DatacenterID, 0))
 	set("alias", node.Name)
 }
@@ -396,8 +396,10 @@ func refreshInputs(m *vpsModel, node sweb.VPS) {
 	if !m.Disk.IsNull() {
 		m.Disk = types.Int64Value(int64(node.DiskGB))
 	}
-	if !m.Plan.IsNull() {
-		m.Plan = types.Int64Value(atoiOr(node.PlanID, m.Plan.ValueInt64()))
+	// PlanID is now FlexInt (int64); keep the current value if the API didn't
+	// report a plan (0), preserving atoiOr's old fallback semantics.
+	if !m.Plan.IsNull() && node.PlanID != 0 {
+		m.Plan = types.Int64Value(int64(node.PlanID))
 	}
 	if !m.Distributive.IsNull() {
 		m.Distributive = types.Int64Value(int64(node.OSDistrID))
