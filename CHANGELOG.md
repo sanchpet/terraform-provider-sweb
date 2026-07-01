@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.2.4...v0.3.0) (2026-07-01)
+
+
+### Features
+
+* in-place resize of plan/cpu/ram/disk via changePlan ([#12](https://github.com/sanchpet/terraform-provider-sweb/issues/12)) ([99cb1d9](https://github.com/sanchpet/terraform-provider-sweb/commit/99cb1d9a13b56798a764e25176fd9b0b213d0c5c))
+
+## Changelog
+
 From v0.2.5 on, this file is maintained automatically by
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commit](https://www.conventionalcommits.org/) messages — see
