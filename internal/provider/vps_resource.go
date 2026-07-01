@@ -72,7 +72,7 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 	replaceStr := []planmodifier.String{stringplanmodifier.RequiresReplace()}
 
 	resp.Schema = schema.Schema{
-		Description: "A SpaceWeb VPS instance. v1 recreates on any input change (no in-place resize/rename yet).",
+		Description: "A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.",
 		Attributes: map[string]schema.Attribute{
 			// Configurator inputs.
 			"cpu": schema.Int64Attribute{
@@ -113,9 +113,8 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 				PlanModifiers: replaceInt,
 			},
 			"alias": schema.StringAttribute{
-				Required:      true,
-				Description:   "Human-facing name for the VPS.",
-				PlanModifiers: replaceStr,
+				Required:    true,
+				Description: "Human-facing name for the VPS. Updated in place (no replacement) via the API rename.",
 			},
 			"ssh_key": schema.StringAttribute{
 				Optional:      true,
@@ -265,11 +264,38 @@ func (r *vpsResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update should never run: every input is RequiresReplace in v1. Implemented to
-// satisfy the interface; a no-op that re-persists the plan.
+// Update handles the one in-place change: alias (rename). Every other input is
+// RequiresReplace, so Terraform only routes here when the alias differs. Rename
+// via the API, then refresh the API-reported fields (name follows alias).
 func (r *vpsResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan vpsModel
+	var plan, state vpsModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	billingID := state.BillingID.ValueString()
+	if plan.Alias.ValueString() != state.Alias.ValueString() {
+		if err := r.client.VPS.Rename(ctx, billingID, plan.Alias.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Failed to rename VPS", err.Error())
+			return
+		}
+	}
+
+	// Re-read so computed fields that track the name (name, and via refreshInputs
+	// the managed alias) reflect the rename. ssh_key/timeouts stay from the plan.
+	node, err := r.findByBillingID(ctx, billingID)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read VPS after update", err.Error())
+		return
+	}
+	if node == nil {
+		resp.Diagnostics.AddError("VPS not found after update", fmt.Sprintf("no VPS with billing_id %q", billingID))
+		return
+	}
+	r.applyAPIState(&plan, *node)
+	refreshInputs(&plan, *node)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

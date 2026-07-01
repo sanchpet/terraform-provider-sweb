@@ -69,8 +69,9 @@ from the API). Notes:
 
 ## Limitations (v1)
 
-- **No in-place update:** any input change forces replacement (resize/rename
-  needs an SDK `Rename` — a fast-follow).
+- **Rename is in-place:** changing `alias` updates the name via the API (no
+  replacement). Every other input still forces replacement (resize needs an SDK
+  resize — a fast-follow).
 - **24h delete lock:** a freshly created VPS cannot be destroyed for 24h; the
   provider surfaces a clear error and keeps the resource in state.
 
