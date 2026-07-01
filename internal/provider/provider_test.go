@@ -67,7 +67,7 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 			IsRunning:    1,
 			CPU:          2,
 			RAM:          6,
-			DiskGB:       15,
+			Disk:         "15 ГБ", // index reports disk as a localized string, not diskGb
 			PlanID:       sweb.FlexInt(p.VPSPlanID),
 			OSDistrID:    sweb.FlexInt(p.DistributiveID),
 			DatacenterID: strconv.Itoa(p.Datacenter),
@@ -92,6 +92,18 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		for i := range m.nodes {
 			if m.nodes[i].BillingID == p["billingId"] {
 				m.nodes[i].Name = p["alias"]
+			}
+		}
+		result = 1
+	case "changePlan":
+		var p struct {
+			BillingID string `json:"billingId"`
+			PlanID    int    `json:"planId"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		for i := range m.nodes {
+			if m.nodes[i].BillingID == p.BillingID {
+				m.nodes[i].PlanID = sweb.FlexInt(p.PlanID)
 			}
 		}
 		result = 1

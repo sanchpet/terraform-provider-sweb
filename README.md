@@ -62,16 +62,20 @@ The id is the `billing_id` (`login_vps_N`) shown by `sweb vps list`. Import
 reconstructs a **plan-mode** config (the resolved `plan` id is always available
 from the API). Notes:
 
-- Switch the imported resource to the configurator (`cpu`/`ram`/`disk`) only if
-  you accept a replace — input changes force recreation in v1.
+- Switching the imported resource to the configurator (`cpu`/`ram`/`disk`) is fine
+  — those update in place (resize), so it does not force a replace.
 - `ssh_key` is create-only and not recoverable from the API; re-state it in HCL.
 - Use `terraform plan -generate-config-out=...` to materialise matching HCL.
 
-## Limitations (v1)
+## In-place updates & limitations
 
-- **Rename is in-place:** changing `alias` updates the name via the API (no
-  replacement). Every other input still forces replacement (resize needs an SDK
-  resize — a fast-follow).
+- **In-place:** `alias` (rename) and `plan` / `cpu` / `ram` / `disk` (resize via
+  `changePlan`) update without a replacement. The resize is asynchronous — the
+  provider waits until it settles (`Modify → ExtIpAdd → …`).
+- **Disk grows only:** the API refuses shrinking a disk; the provider rejects a
+  disk decrease at apply with a clear error.
+- **Forces replacement:** `category` (storage tier), `distributive` (OS),
+  `datacenter`, `ssh_key` and `ip_count`.
 - **24h delete lock:** a freshly created VPS cannot be destroyed for 24h; the
   provider surfaces a clear error and keeps the resource in state.
 

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -99,4 +100,85 @@ resource "sweb_vps" "test" {
   alias        = "tf-acc-renamed"
 }
 `, endpoint)
+}
+
+// TestAccVPSResourceResize exercises the in-place resize: changing `plan` must be
+// an Update (changePlan), never a replacement, and the stable computed fields
+// stay known.
+func TestAccVPSResourceResize(t *testing.T) {
+	mock := newMockSweb()
+	defer mock.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVPSConfigPlan(mock.URL, 379),
+				Check:  resource.TestCheckResourceAttr("sweb_vps.test", "plan", "379"),
+			},
+			{ // resize: plan change is an in-place update, not a replacement
+				Config: testAccVPSConfigPlan(mock.URL, 228),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("sweb_vps.test", plancheck.ResourceActionUpdate),
+						plancheck.ExpectKnownValue("sweb_vps.test", tfjsonpath.New("uid"), knownvalue.StringExact("uid-1")),
+					},
+				},
+				Check: resource.TestCheckResourceAttr("sweb_vps.test", "plan", "228"),
+			},
+		},
+	})
+}
+
+// TestAccVPSResourceDiskShrink verifies the provider refuses to shrink the disk
+// with a clear error, before hitting the API.
+func TestAccVPSResourceDiskShrink(t *testing.T) {
+	mock := newMockSweb()
+	defer mock.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: testAccVPSConfig(mock.URL)}, // configurator, disk = 15
+			{
+				Config:      testAccVPSConfigDisk(mock.URL, 10), // shrink 15 → 10
+				ExpectError: regexp.MustCompile("Disk cannot be shrunk"),
+			},
+		},
+	})
+}
+
+func testAccVPSConfigPlan(endpoint string, plan int) string {
+	return fmt.Sprintf(`
+provider "sweb" {
+  endpoint = %[1]q
+  token    = "test-token"
+}
+
+resource "sweb_vps" "test" {
+  plan         = %[2]d
+  distributive = 164
+  datacenter   = 1
+  alias        = "tf-acc"
+}
+`, endpoint, plan)
+}
+
+func testAccVPSConfigDisk(endpoint string, disk int) string {
+	return fmt.Sprintf(`
+provider "sweb" {
+  endpoint = %[1]q
+  token    = "test-token"
+}
+
+resource "sweb_vps" "test" {
+  cpu          = 2
+  ram          = 6
+  disk         = %[2]d
+  category     = 1
+  distributive = 164
+  datacenter   = 1
+  alias        = "tf-acc"
+}
+`, endpoint, disk)
 }
