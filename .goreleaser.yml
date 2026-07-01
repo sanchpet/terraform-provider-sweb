@@ -54,6 +54,9 @@ release:
     name: terraform-provider-sweb
   # Registry ingests the GitHub release; keep it a real (non-draft) release.
   draft: false
+  # release-please creates the release first; GoReleaser uploads the signed
+  # binaries + manifest to it. keep-existing = don't recreate/error.
+  mode: keep-existing
   extra_files:
     # The registry reads protocol versions from this manifest; without it it
     # falls back to protocol 5.0 and mishandles a Plugin Framework provider.
