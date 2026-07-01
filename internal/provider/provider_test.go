@@ -86,6 +86,15 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		m.nodes = kept
 		result = map[string]bool{"ok": true}
+	case "rename":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		for i := range m.nodes {
+			if m.nodes[i].BillingID == p["billingId"] {
+				m.nodes[i].Name = p["alias"]
+			}
+		}
+		result = 1
 	default:
 		result = map[string]bool{"ok": true}
 	}

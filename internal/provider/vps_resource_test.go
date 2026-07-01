@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // TestAccVPSResource exercises the full Terraform lifecycle against the mock
@@ -27,6 +28,18 @@ func TestAccVPSResource(t *testing.T) {
 					resource.TestCheckResourceAttr("sweb_vps.test", "name", "tf-acc"),
 					resource.TestCheckResourceAttr("sweb_vps.test", "ip", "203.0.113.50"),
 					resource.TestCheckResourceAttr("sweb_vps.test", "running", "true"),
+				),
+			},
+			{ // rename: alias change must be an in-place update, never a replacement
+				Config: testAccVPSConfigRenamed(mock.URL),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("sweb_vps.test", plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("sweb_vps.test", "alias", "tf-acc-renamed"),
+					resource.TestCheckResourceAttr("sweb_vps.test", "name", "tf-acc-renamed"),
 				),
 			},
 			{ // import: reconstructs in plan-mode, so configurator inputs differ by design
@@ -56,6 +69,27 @@ resource "sweb_vps" "test" {
   distributive = 164
   datacenter   = 1
   alias        = "tf-acc"
+}
+`, endpoint)
+}
+
+// testAccVPSConfigRenamed is testAccVPSConfig with only the alias changed — the
+// input that the provider updates in place.
+func testAccVPSConfigRenamed(endpoint string) string {
+	return fmt.Sprintf(`
+provider "sweb" {
+  endpoint = %[1]q
+  token    = "test-token"
+}
+
+resource "sweb_vps" "test" {
+  cpu          = 2
+  ram          = 6
+  disk         = 15
+  category     = 1
+  distributive = 164
+  datacenter   = 1
+  alias        = "tf-acc-renamed"
 }
 `, endpoint)
 }

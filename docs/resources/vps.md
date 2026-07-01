@@ -3,12 +3,12 @@
 page_title: "sweb_vps Resource - sweb"
 subcategory: ""
 description: |-
-  A SpaceWeb VPS instance. v1 recreates on any input change (no in-place resize/rename yet).
+  A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.
 ---
 
 # sweb_vps (Resource)
 
-A SpaceWeb VPS instance. v1 recreates on any input change (no in-place resize/rename yet).
+A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.
 
 ## Example Usage
 
@@ -47,7 +47,7 @@ output "infra_hub_ip" {
 
 ### Required
 
-- `alias` (String) Human-facing name for the VPS.
+- `alias` (String) Human-facing name for the VPS. Updated in place (no replacement) via the API rename.
 - `datacenter` (Number) Datacenter id (1=spb, 2=msk, 3=ams).
 - `distributive` (Number) OS distributive id (e.g. 164=debian-13, 122=ubuntu-24.04).
 
