@@ -53,6 +53,12 @@ write tests that hit the real API — `create` bills and locks deletes for 24h.
 - **English** for all repo artifacts (code, comments, docs, commits, PRs).
 - Commits: small and focused; `--signoff` + `Co-Authored-By: Claude` (personal repo).
 - **Branch + PR**; do not self-merge — merging is the owner's call.
+- **Conventional Commits + release-please (BLOCKING):** commit / PR-title format is
+  `<type>[scope]: <desc>` (`feat`→minor, `fix`→patch, `!` or `BREAKING CHANGE`→major).
+  PRs are squash-merged, so the **PR title is the release commit** — CI enforces its
+  format (`pr-title` workflow). Versioning and `CHANGELOG.md` are automated by
+  **release-please** (merging its release PR tags + runs GoReleaser → registry) —
+  never `git tag` or edit the changelog by hand. See `CONTRIBUTING.md`.
 - Keep the resource schema and `README`/`examples/` in sync; the registry renders
   `docs/` (generate with `tfplugindocs` when added).
 
