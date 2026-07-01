@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -78,33 +79,29 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 	keepBool := []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}
 
 	resp.Schema = schema.Schema{
-		Description: "A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.",
+		Description: "A SpaceWeb VPS instance. alias (rename) and plan/cpu/ram/disk (resize via changePlan) update in place; category, distributive and datacenter force replacement. Disk can only grow — the API refuses shrinking it.",
 		Attributes: map[string]schema.Attribute{
-			// Configurator inputs.
+			// Configurator inputs. cpu/ram/disk update in place (resize); disk grow-only.
 			"cpu": schema.Int64Attribute{
-				Optional:      true,
-				Description:   "Configurator: CPU cores. Resolved to a plan via getConstructorPlanId. Mutually exclusive with `plan`.",
-				PlanModifiers: replaceInt,
+				Optional:    true,
+				Description: "Configurator: CPU cores. Resolved to a plan via getConstructorPlanId. Updates in place (resize). Mutually exclusive with `plan`.",
 			},
 			"ram": schema.Int64Attribute{
-				Optional:      true,
-				Description:   "Configurator: RAM in GB. Mutually exclusive with `plan`.",
-				PlanModifiers: replaceInt,
+				Optional:    true,
+				Description: "Configurator: RAM in GB. Updates in place (resize). Mutually exclusive with `plan`.",
 			},
 			"disk": schema.Int64Attribute{
-				Optional:      true,
-				Description:   "Configurator: disk in GB. Mutually exclusive with `plan`.",
-				PlanModifiers: replaceInt,
+				Optional:    true,
+				Description: "Configurator: disk in GB. Updates in place (resize); can only grow — the API refuses shrinking. Mutually exclusive with `plan`.",
 			},
 			"category": schema.Int64Attribute{
 				Optional:      true,
-				Description:   "Configurator: catalog category id (1=nvme, 2=hdd, 3=turbo). Defaults to 1 when the configurator is used. Mutually exclusive with `plan`.",
+				Description:   "Configurator: catalog category id (1=nvme, 2=hdd, 3=turbo). Defaults to 1 when the configurator is used. Changing the storage tier forces replacement. Mutually exclusive with `plan`.",
 				PlanModifiers: replaceInt,
 			},
 			"plan": schema.Int64Attribute{
-				Optional:      true,
-				Description:   "Ready-made plan id. Mutually exclusive with the configurator (`cpu`/`ram`/`disk`).",
-				PlanModifiers: replaceInt,
+				Optional:    true,
+				Description: "Ready-made plan id. Updates in place (resize via changePlan). Mutually exclusive with the configurator (`cpu`/`ram`/`disk`).",
 			},
 
 			// Common inputs.
@@ -159,7 +156,7 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 			},
 		},
 		Blocks: map[string]schema.Block{
-			"timeouts": timeouts.Block(ctx, timeouts.Opts{Create: true}),
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{Create: true, Update: true}),
 		},
 	}
 }
@@ -207,19 +204,10 @@ func (r *vpsResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 
 	// Resolve the plan id: explicit `plan`, or via the configurator.
-	planID := int(plan.Plan.ValueInt64())
-	if plan.Plan.IsNull() {
-		category := int(plan.Category.ValueInt64())
-		if plan.Category.IsNull() {
-			category = 1
-		}
-		id, err := r.client.VPS.GetConstructorPlanID(ctx,
-			int(plan.CPU.ValueInt64()), int(plan.RAM.ValueInt64()), int(plan.Disk.ValueInt64()), category)
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to resolve configurator plan", err.Error())
-			return
-		}
-		planID = id
+	planID, err := r.resolvePlanID(ctx, plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to resolve configurator plan", err.Error())
+		return
 	}
 
 	// Snapshot existing billing ids so we can detect the new node (Create's
@@ -276,9 +264,10 @@ func (r *vpsResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update handles the one in-place change: alias (rename). Every other input is
-// RequiresReplace, so Terraform only routes here when the alias differs. Rename
-// via the API, then refresh the API-reported fields (name follows alias).
+// Update applies the in-place changes: alias (rename) and plan/cpu/ram/disk
+// (resize via changePlan). category/distributive/datacenter are RequiresReplace,
+// so Terraform only routes here for the in-place set. Disk grows only (the API
+// refuses shrinking). A resize is async, so it waits until current_action idles.
 func (r *vpsResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state vpsModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -288,6 +277,8 @@ func (r *vpsResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	}
 
 	billingID := state.BillingID.ValueString()
+
+	// alias — in-place label change (rename).
 	if plan.Alias.ValueString() != state.Alias.ValueString() {
 		if err := r.client.VPS.Rename(ctx, billingID, plan.Alias.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Failed to rename VPS", err.Error())
@@ -295,8 +286,42 @@ func (r *vpsResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		}
 	}
 
-	// Re-read so computed fields that track the name (name, and via refreshInputs
-	// the managed alias) reflect the rename. ssh_key/timeouts stay from the plan.
+	// plan / cpu / ram / disk — in-place resize via changePlan.
+	if resizeChanged(plan, state) {
+		// Disk grows only: the API refuses shrinking (-32500 "Нельзя уменьшить
+		// размер диска"). Catch it before mutating, with a clear message.
+		if !plan.Disk.IsNull() && !state.Disk.IsNull() && plan.Disk.ValueInt64() < state.Disk.ValueInt64() {
+			resp.Diagnostics.AddError("Disk cannot be shrunk",
+				fmt.Sprintf("SpaceWeb refuses to reduce a VPS disk (current %d GB, requested %d GB). "+
+					"Set disk to at least the current size.", state.Disk.ValueInt64(), plan.Disk.ValueInt64()))
+			return
+		}
+		planID, err := r.resolvePlanID(ctx, plan)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to resolve target plan", err.Error())
+			return
+		}
+		if err := r.client.VPS.ChangePlan(ctx, billingID, planID); err != nil {
+			resp.Diagnostics.AddError("Failed to change plan", err.Error())
+			return
+		}
+		// The resize is asynchronous (Modify → ExtIpAdd → …) while is_running stays
+		// 1; wait until current_action settles before reading back.
+		updateTimeout, diags := plan.Timeouts.Update(ctx, 15*time.Minute)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		waitCtx, cancel := context.WithTimeout(ctx, updateTimeout)
+		defer cancel()
+		if _, err := r.client.VPS.WaitForIdle(waitCtx, billingID, 10*time.Second, nil); err != nil {
+			resp.Diagnostics.AddError("Resize did not settle", err.Error())
+			return
+		}
+	}
+
+	// Re-read so computed + input fields reflect the change (name follows alias;
+	// cpu/ram/disk/plan follow the resize). ssh_key/timeouts stay from the plan.
 	node, err := r.findByBillingID(ctx, billingID)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read VPS after update", err.Error())
@@ -394,7 +419,9 @@ func refreshInputs(m *vpsModel, node sweb.VPS) {
 		m.RAM = types.Int64Value(int64(node.RAM))
 	}
 	if !m.Disk.IsNull() {
-		m.Disk = types.Int64Value(int64(node.DiskGB))
+		// index reports disk as a localized string ("30 ГБ"), not a numeric diskGb;
+		// parse the leading GB so a configurator resource doesn't drift to 0.
+		m.Disk = types.Int64Value(parseDiskGB(node.Disk))
 	}
 	// PlanID is now FlexInt (int64); keep the current value if the API didn't
 	// report a plan (0), preserving atoiOr's old fallback semantics.
@@ -419,6 +446,48 @@ func atoiOr(s string, fallback int64) int64 {
 		return n
 	}
 	return fallback
+}
+
+// resolvePlanID returns the plan id to provision or resize to: the explicit
+// `plan`, or a configurator plan resolved from cpu/ram/disk/category.
+func (r *vpsResource) resolvePlanID(ctx context.Context, m vpsModel) (int, error) {
+	if !m.Plan.IsNull() {
+		return int(m.Plan.ValueInt64()), nil
+	}
+	category := int(m.Category.ValueInt64())
+	if m.Category.IsNull() {
+		category = 1 // NVMe
+	}
+	return r.client.VPS.GetConstructorPlanID(ctx,
+		int(m.CPU.ValueInt64()), int(m.RAM.ValueInt64()), int(m.Disk.ValueInt64()), category)
+}
+
+// resizeChanged reports whether any resize-relevant input (plan, or the
+// configurator cpu/ram/disk) differs between plan and state.
+func resizeChanged(plan, state vpsModel) bool {
+	return !plan.Plan.Equal(state.Plan) ||
+		!plan.CPU.Equal(state.CPU) ||
+		!plan.RAM.Equal(state.RAM) ||
+		!plan.Disk.Equal(state.Disk)
+}
+
+// parseDiskGB extracts the integer GB from the API's localized disk string
+// (e.g. "30 ГБ" → 30). index reports disk as this human string, not a numeric
+// field. Configurator disks are in GB, so the leading integer is the size.
+func parseDiskGB(disk string) int64 {
+	var n int64
+	seen := false
+	for _, ch := range strings.TrimSpace(disk) {
+		if ch < '0' || ch > '9' {
+			break
+		}
+		n = n*10 + int64(ch-'0')
+		seen = true
+	}
+	if !seen {
+		return 0
+	}
+	return n
 }
 
 func (r *vpsResource) listBillingIDs(ctx context.Context) (map[string]struct{}, error) {
