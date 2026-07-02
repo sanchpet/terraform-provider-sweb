@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.3.0...v0.4.0) (2026-07-02)
+
+
+### Features
+
+* add sweb_plan data source resolving configurator spec to plan id ([#17](https://github.com/sanchpet/terraform-provider-sweb/issues/17)) ([d3020d3](https://github.com/sanchpet/terraform-provider-sweb/commit/d3020d341227096814f75f568de6216e06491e5b))
+
 ## [0.3.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.2.4...v0.3.0) (2026-07-01)
 
 
