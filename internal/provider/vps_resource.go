@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -25,6 +26,17 @@ import (
 // invalidParamsCode is the SpaceWeb JSON-RPC code for "invalid params /
 // operation unavailable", which also covers the 24h post-create deletion lock.
 const invalidParamsCode = -32500
+
+// createMu serializes VPS creation across all sweb_vps resources in this provider
+// process. SpaceWeb's create is a single-writer operation: it returns nothing
+// usable, so the provider correlates the new node by diffing the VPS list before
+// and after (listBillingIDs → Create → waitForNewVPS). Two creates running
+// concurrently break that both ways — the correlation could adopt the other
+// create's node, and the API itself rejects simultaneous create orders (-32000
+// Internal Server Error). Terraform runs resources concurrently up to
+// -parallelism; this mutex keeps each create's before→create→find window serial
+// regardless, so consumers never have to pass -parallelism=1.
+var createMu sync.Mutex
 
 var (
 	_ resource.Resource                     = (*vpsResource)(nil)
@@ -210,31 +222,45 @@ func (r *vpsResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	// Snapshot existing billing ids so we can detect the new node (Create's
-	// response shape is untyped/unreliable — correlate via List-diff).
-	before, err := r.listBillingIDs(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to list VPS before create", err.Error())
-		return
-	}
-
-	_, err = r.client.VPS.Create(ctx, sweb.CreateVPSRequest{
+	createReq := sweb.CreateVPSRequest{
 		DistributiveID: int(plan.Distributive.ValueInt64()),
 		VPSPlanID:      planID,
 		Datacenter:     int(plan.Datacenter.ValueInt64()),
 		Alias:          plan.Alias.ValueString(),
 		SSHKey:         plan.SSHKey.ValueString(),
 		IPCount:        int(plan.IPCount.ValueInt64()),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to create VPS", err.Error())
-		return
 	}
 
-	// Poll until the new node appears and is running (or the timeout elapses).
-	node, err := r.waitForNewVPS(ctx, before, createTimeout)
-	if err != nil {
-		resp.Diagnostics.AddError("VPS did not become ready", err.Error())
+	// The whole snapshot → create → correlate window must be serial: the List-diff
+	// (before/after) that identifies the new node is only unambiguous when a single
+	// create runs at a time (see createMu). Holding the lock through waitForNewVPS
+	// also serializes the create orders the API can't take concurrently.
+	var node sweb.VPS
+	ok := func() bool {
+		createMu.Lock()
+		defer createMu.Unlock()
+
+		// Snapshot existing billing ids so we can detect the new node (Create's
+		// response shape is untyped/unreliable — correlate via List-diff).
+		before, err := r.listBillingIDs(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to list VPS before create", err.Error())
+			return false
+		}
+		if _, err := r.client.VPS.Create(ctx, createReq); err != nil {
+			resp.Diagnostics.AddError("Failed to create VPS", err.Error())
+			return false
+		}
+		// Poll until the new node appears and is running (or the timeout elapses).
+		n, err := r.waitForNewVPS(ctx, before, createTimeout)
+		if err != nil {
+			resp.Diagnostics.AddError("VPS did not become ready", err.Error())
+			return false
+		}
+		node = n
+		return true
+	}()
+	if !ok {
 		return
 	}
 
