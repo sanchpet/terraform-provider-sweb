@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.4.0...v0.4.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* serialize VPS creation to keep the List-diff correlation correct ([#19](https://github.com/sanchpet/terraform-provider-sweb/issues/19)) ([a415336](https://github.com/sanchpet/terraform-provider-sweb/commit/a415336262fdbd4c77a8d5266c6c52d0403d754f))
+
 ## [0.4.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.3.0...v0.4.0) (2026-07-02)
 
 
