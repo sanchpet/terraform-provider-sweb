@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -26,9 +27,10 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 // enough to exercise the full create → list-diff → poll → read → import → remove
 // lifecycle without touching (or billing) the real service.
 type mockSweb struct {
-	mu    sync.Mutex
-	nodes []sweb.VPS
-	seq   int
+	mu            sync.Mutex
+	nodes         []sweb.VPS
+	seq           int
+	localAttached map[string]bool // billingId → attached to the local network
 }
 
 type rpcReq struct {
@@ -74,7 +76,34 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		})
 		result = map[string]bool{"ok": true}
 	case "index":
-		result = m.nodes
+		if strings.HasSuffix(r.URL.Path, "/vps/ip") {
+			// IP inventory (endpoint /vps/ip): report the local IP if attached.
+			var p map[string]string
+			_ = json.Unmarshal(req.Params, &p)
+			local := []any{}
+			if m.localAttached[p["billingId"]] {
+				local = []any{map[string]string{"ip": "10.0.0.24", "mac": "00:16:3e:aa:bb:cc", "mask": "10.0.0.0/27"}}
+			}
+			result = map[string]any{
+				"ips": []any{}, "protected_ips": []any{}, "local_ip": local,
+				"vps": map[string]any{"billingId": p["billingId"], "isEmpty": "0", "ordered_ip_count": "1"},
+			}
+		} else {
+			result = m.nodes
+		}
+	case "addLocal":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		if m.localAttached == nil {
+			m.localAttached = map[string]bool{}
+		}
+		m.localAttached[p["billingId"]] = true
+		result = 1
+	case "removeLocal":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		delete(m.localAttached, p["billingId"])
+		result = 1
 	case "remove":
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)

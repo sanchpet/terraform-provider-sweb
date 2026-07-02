@@ -52,6 +52,19 @@ or a ready-made **`plan`** id — the two are mutually exclusive. Common inputs:
 `distributive`, `datacenter`, `alias`, optional `ssh_key`, `ip_count`. Computed:
 `billing_id` (= resource id), `uid`, `name`, `ip`, `running`.
 
+### The `sweb_vps_local_network` resource
+
+Attaches an **existing** VPS to the account private (local) network — declaratively,
+**no re-create** (via `addLocal`/`removeLocal` on `/vps/ip`). SpaceWeb assigns the
+local IP; the guest OS still needs the private NIC configured with it.
+
+```hcl
+resource "sweb_vps_local_network" "infra_01" {
+  billing_id = "login_vps_10"
+}
+# → .local_ip / .mask / .mac (computed)
+```
+
 ### The `sweb_plan` data source
 
 Resolves a configurator spec to a plan id, so HCL reads by resources instead of a
