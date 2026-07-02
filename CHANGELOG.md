@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.0...v0.5.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* bump sweb-go-sdk to v0.8.1 (IP price FlexFloat) ([#23](https://github.com/sanchpet/terraform-provider-sweb/issues/23)) ([1f186df](https://github.com/sanchpet/terraform-provider-sweb/commit/1f186df440dd00e4b51ca3faa0fb1ca8fbdf71f7))
+
 ## [0.5.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.4.1...v0.5.0) (2026-07-02)
 
 
