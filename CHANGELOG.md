@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.1...v0.5.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* bump sweb-go-sdk to v0.8.2 (local_ip object-shape decode) ([#25](https://github.com/sanchpet/terraform-provider-sweb/issues/25)) ([0db49c4](https://github.com/sanchpet/terraform-provider-sweb/commit/0db49c4f78bbf2d24610da049026552b88b77dbc))
+
 ## [0.5.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.0...v0.5.1) (2026-07-02)
 
 
