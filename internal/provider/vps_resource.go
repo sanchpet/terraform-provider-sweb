@@ -133,7 +133,7 @@ func (r *vpsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp
 			},
 			"ssh_key": schema.StringAttribute{
 				Optional:      true,
-				Description:   "SSH public key id to inject at create. Create-only: not read back from the API.",
+				Description:   "SSH public key content (the raw `ssh-ed25519 ...` string, not a key id) to inject at create. Create-only: not read back from the API; changing it forces replacement.",
 				PlanModifiers: replaceStr,
 			},
 			"ip_count": schema.Int64Attribute{
