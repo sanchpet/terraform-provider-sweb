@@ -182,3 +182,47 @@ resource "sweb_vps" "test" {
 }
 `, endpoint, disk)
 }
+
+// TestAccVPSResourceConcurrentCreate creates several nodes in one apply. Terraform
+// provisions independent resources concurrently, which would race the List-diff
+// correlation (each create could adopt another's new node) — createMu serializes
+// the create window so every node keeps its own identity. Guards that regression:
+// each instance's reported name matches the alias it was created with.
+func TestAccVPSResourceConcurrentCreate(t *testing.T) {
+	mock := newMockSweb()
+	defer mock.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVPSConfigFleet(mock.URL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("sweb_vps.node.0", "name", "tf-acc-0"),
+					resource.TestCheckResourceAttr("sweb_vps.node.1", "name", "tf-acc-1"),
+					resource.TestCheckResourceAttr("sweb_vps.node.2", "name", "tf-acc-2"),
+					resource.TestCheckResourceAttrSet("sweb_vps.node.0", "billing_id"),
+					resource.TestCheckResourceAttrSet("sweb_vps.node.1", "billing_id"),
+					resource.TestCheckResourceAttrSet("sweb_vps.node.2", "billing_id"),
+				),
+			},
+		},
+	})
+}
+
+func testAccVPSConfigFleet(endpoint string) string {
+	return fmt.Sprintf(`
+provider "sweb" {
+  endpoint = %[1]q
+  token    = "test-token"
+}
+
+resource "sweb_vps" "node" {
+  count        = 3
+  plan         = 379
+  distributive = 164
+  datacenter   = 1
+  alias        = "tf-acc-${count.index}"
+}
+`, endpoint)
+}
