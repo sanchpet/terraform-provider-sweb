@@ -52,6 +52,32 @@ or a ready-made **`plan`** id — the two are mutually exclusive. Common inputs:
 `distributive`, `datacenter`, `alias`, optional `ssh_key`, `ip_count`. Computed:
 `billing_id` (= resource id), `uid`, `name`, `ip`, `running`.
 
+### The `sweb_plan` data source
+
+Resolves a configurator spec to a plan id, so HCL reads by resources instead of a
+magic number — and an **imported plan-mode node stays clean** (the data source
+re-derives the same id, no mode switch, no resize):
+
+```hcl
+data "sweb_plan" "infra" {
+  cpu      = 2
+  ram      = 6  # GB
+  disk     = 15 # GB
+  category = 1  # 1=NVMe (default), 2=HDD, 3=Turbo
+}
+
+resource "sweb_vps" "infra_hub" {
+  alias        = "infra-hub"
+  plan         = data.sweb_plan.infra.id
+  distributive = 164
+  datacenter   = 1
+}
+```
+
+It calls the same `getConstructorPlanId` resolver as the resource. The id is
+resolved **dynamically each plan**, so a catalog remap on SpaceWeb's side could
+change it — pin a literal `plan` if you need a frozen id.
+
 ### Importing
 
 ```sh
