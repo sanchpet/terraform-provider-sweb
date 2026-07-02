@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.4.1...v0.5.0) (2026-07-02)
+
+
+### Features
+
+* add sweb_vps_local_network resource (private network attach) ([#21](https://github.com/sanchpet/terraform-provider-sweb/issues/21)) ([cad325e](https://github.com/sanchpet/terraform-provider-sweb/commit/cad325e0bb58bae8b9e68bfa378e01cf31bb9642))
+
 ## [0.4.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.4.0...v0.4.1) (2026-07-02)
 
 
