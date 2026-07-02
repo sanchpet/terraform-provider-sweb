@@ -3,12 +3,12 @@
 page_title: "sweb_vps Resource - sweb"
 subcategory: ""
 description: |-
-  A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.
+  A SpaceWeb VPS instance. alias (rename) and plan/cpu/ram/disk (resize via changePlan) update in place; category, distributive and datacenter force replacement. Disk can only grow — the API refuses shrinking it.
 ---
 
 # sweb_vps (Resource)
 
-A SpaceWeb VPS instance. alias changes update in place (rename); every other input change forces replacement.
+A SpaceWeb VPS instance. alias (rename) and plan/cpu/ram/disk (resize via changePlan) update in place; category, distributive and datacenter force replacement. Disk can only grow — the API refuses shrinking it.
 
 ## Example Usage
 
@@ -53,12 +53,12 @@ output "infra_hub_ip" {
 
 ### Optional
 
-- `category` (Number) Configurator: catalog category id (1=nvme, 2=hdd, 3=turbo). Defaults to 1 when the configurator is used. Mutually exclusive with `plan`.
-- `cpu` (Number) Configurator: CPU cores. Resolved to a plan via getConstructorPlanId. Mutually exclusive with `plan`.
-- `disk` (Number) Configurator: disk in GB. Mutually exclusive with `plan`.
+- `category` (Number) Configurator: catalog category id (1=nvme, 2=hdd, 3=turbo). Defaults to 1 when the configurator is used. Changing the storage tier forces replacement. Mutually exclusive with `plan`.
+- `cpu` (Number) Configurator: CPU cores. Resolved to a plan via getConstructorPlanId. Updates in place (resize). Mutually exclusive with `plan`.
+- `disk` (Number) Configurator: disk in GB. Updates in place (resize); can only grow — the API refuses shrinking. Mutually exclusive with `plan`.
 - `ip_count` (Number) Number of IPs to order. Create-only.
-- `plan` (Number) Ready-made plan id. Mutually exclusive with the configurator (`cpu`/`ram`/`disk`).
-- `ram` (Number) Configurator: RAM in GB. Mutually exclusive with `plan`.
+- `plan` (Number) Ready-made plan id. Updates in place (resize via changePlan). Mutually exclusive with the configurator (`cpu`/`ram`/`disk`).
+- `ram` (Number) Configurator: RAM in GB. Updates in place (resize). Mutually exclusive with `plan`.
 - `ssh_key` (String) SSH public key id to inject at create. Create-only: not read back from the API.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
@@ -77,6 +77,7 @@ output "infra_hub_ip" {
 Optional:
 
 - `create` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
+- `update` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
 
 ## Import
 

@@ -100,7 +100,7 @@ func (p *swebProvider) Resources(_ context.Context) []func() resource.Resource {
 }
 
 func (p *swebProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{NewPlanDataSource}
 }
 
 func firstNonEmpty(vals ...string) string {
