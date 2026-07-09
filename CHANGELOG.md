@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.2...v0.5.3) (2026-07-02)
+
+
+### Bug Fixes
+
+* correct ssh_key description (public key content, not a key id) ([#27](https://github.com/sanchpet/terraform-provider-sweb/issues/27)) ([cc7c7c7](https://github.com/sanchpet/terraform-provider-sweb/commit/cc7c7c761e67e12ad66e90cca45e9698dc0982c2))
+
 ## [0.5.2](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.1...v0.5.2) (2026-07-02)
 
 
