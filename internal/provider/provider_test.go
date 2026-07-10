@@ -30,7 +30,8 @@ type mockSweb struct {
 	mu            sync.Mutex
 	nodes         []sweb.VPS
 	seq           int
-	localAttached map[string]bool // billingId → attached to the local network
+	localAttached map[string]bool   // billingId → attached to the local network
+	ptr           map[string]string // ip → PTR record
 }
 
 type rpcReq struct {
@@ -136,6 +137,18 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		result = 1
+	case "editPtr":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		if m.ptr == nil {
+			m.ptr = map[string]string{}
+		}
+		m.ptr[p["ip"]] = p["ptr"]
+		result = 1
+	case "getPtr":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		result = m.ptr[p["ip"]]
 	default:
 		result = map[string]bool{"ok": true}
 	}
