@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.6.0...v0.7.0) (2026-07-10)
+
+
+### Features
+
+* add sweb_vps_backup_settings resource ([#34](https://github.com/sanchpet/terraform-provider-sweb/issues/34)) ([a698c3d](https://github.com/sanchpet/terraform-provider-sweb/commit/a698c3d5de21f4cc9dbe20edfcf4262e0fca7a09))
+
 ## [0.6.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.3...v0.6.0) (2026-07-10)
 
 
