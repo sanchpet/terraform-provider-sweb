@@ -59,7 +59,7 @@ output "infra_hub_ip" {
 - `ip_count` (Number) Number of IPs to order. Create-only.
 - `plan` (Number) Ready-made plan id. Updates in place (resize via changePlan). Mutually exclusive with the configurator (`cpu`/`ram`/`disk`).
 - `ram` (Number) Configurator: RAM in GB. Updates in place (resize). Mutually exclusive with `plan`.
-- `ssh_key` (String) SSH public key id to inject at create. Create-only: not read back from the API.
+- `ssh_key` (String) SSH public key content (the raw `ssh-ed25519 ...` string, not a key id) to inject at create. Create-only: not read back from the API; changing it forces replacement.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
