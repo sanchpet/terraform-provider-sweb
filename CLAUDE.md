@@ -12,17 +12,28 @@ maps the resource lifecycle and smooths three API leaks:
 
 - `main.go` — `providerserver.Serve` at `registry.terraform.io/sanchpet/sweb`.
 - `internal/provider/provider.go` — provider schema + `Configure` (builds the
-  `*sweb.Client` from `token` or `login`+`password`, `endpoint` override).
-- `internal/provider/vps_resource.go` — the `sweb_vps` resource (CRUD + import).
+  `*sweb.Client` from `token` or `login`+`password`, `endpoint` override); also the
+  `Resources` / `DataSources` registries — a new resource is a new file registered
+  here.
+- `internal/provider/vps_resource.go` — the `sweb_vps` resource (CRUD + import;
+  in-place resize via `changePlan`, so `plan`/`cpu`/`ram`/`disk` no longer force
+  replacement — grow-only on disk).
+- `internal/provider/vps_local_network_resource.go` — `sweb_vps_local_network`,
+  attaches an existing VPS to the private network (`addLocal`, no re-create).
+- `internal/provider/plan_data_source.go` — the `sweb_plan` data source (resolve a
+  plan by spec instead of a magic `plan_id`).
 
-### Three API leaks the provider closes
+### API leaks the provider closes
 
 1. **`Create` returns nothing usable** → correlate the new node via a **List-diff**
    (snapshot billing ids before create, find the new one after). Never trust the
-   raw create body. Assumes a single writer (personal infra).
-2. **Async provisioning** (`is_running`/`current_action`) → **poll until ready**
+   raw create body.
+2. **The API is a single writer** → the List-diff correlation is only sound if one
+   `create` is in flight at a time; concurrent orders also draw `-32000`. Serialize
+   creates behind a **mutex** (`create` is the one non-parallel resource op).
+3. **Async provisioning** (`is_running`/`current_action`) → **poll until ready**
    with a `timeouts` block (create default 15m).
-3. **24h post-create delete lock** (`-32500`) → hard diagnostic, keep the resource
+4. **24h post-create delete lock** (`-32500`) → hard diagnostic, keep the resource
    in state. Never silently orphan a billed VPS.
 
 ### Resource identity & import
@@ -51,7 +62,8 @@ write tests that hit the real API — `create` bills and locks deletes for 24h.
 ## Conventions
 
 - **English** for all repo artifacts (code, comments, docs, commits, PRs).
-- Commits: small and focused; `--signoff` + `Co-Authored-By: Claude` (personal repo).
+- Commits: small and focused; `--signoff` + `Assisted-By: Claude <noreply@anthropic.com>`
+  (personal repo — the owner authors, Claude assists; not `Co-Authored-By`).
 - **Branch + PR**; do not self-merge — merging is the owner's call.
 - **Conventional Commits + release-please (BLOCKING):** commit / PR-title format is
   `<type>[scope]: <desc>` (`feat`→minor, `fix`→patch, `!` or `BREAKING CHANGE`→major).
