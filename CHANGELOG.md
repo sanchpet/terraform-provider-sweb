@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.3...v0.6.0) (2026-07-10)
+
+
+### Features
+
+* add sweb_ptr_record resource ([#32](https://github.com/sanchpet/terraform-provider-sweb/issues/32)) ([a113965](https://github.com/sanchpet/terraform-provider-sweb/commit/a1139656480423872b67904050469b2ebac2cb22))
+
 ## [0.5.3](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.5.2...v0.5.3) (2026-07-02)
 
 
