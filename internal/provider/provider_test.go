@@ -30,8 +30,9 @@ type mockSweb struct {
 	mu            sync.Mutex
 	nodes         []sweb.VPS
 	seq           int
-	localAttached map[string]bool   // billingId → attached to the local network
-	ptr           map[string]string // ip → PTR record
+	localAttached map[string]bool                // billingId → attached to the local network
+	ptr           map[string]string              // ip → PTR record
+	backupSet     map[string]sweb.BackupSettings // billingId → auto-backup schedule
 }
 
 type rpcReq struct {
@@ -149,6 +150,26 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)
 		result = m.ptr[p["ip"]]
+	case "saveSettings":
+		var p struct {
+			BillingID string `json:"billingId"`
+			Mode      string `json:"mode"`
+			Frequency int    `json:"frequency"`
+			Time      int    `json:"time"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		if m.backupSet == nil {
+			m.backupSet = map[string]sweb.BackupSettings{}
+		}
+		m.backupSet[p.BillingID] = sweb.BackupSettings{
+			Mode: p.Mode, Frequency: sweb.FlexInt(p.Frequency), Time: sweb.FlexInt(p.Time),
+			NextDataBackup: "2026-07-17",
+		}
+		result = 1
+	case "getSettings":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		result = []sweb.BackupSettings{m.backupSet[p["billingId"]]}
 	default:
 		result = map[string]bool{"ok": true}
 	}
