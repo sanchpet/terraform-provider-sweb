@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.7.0...v0.8.0) (2026-07-12)
+
+
+### Features
+
+* add domain subdomain/redirect resources and a domain data source ([#36](https://github.com/sanchpet/terraform-provider-sweb/issues/36)) ([c4ae45f](https://github.com/sanchpet/terraform-provider-sweb/commit/c4ae45fe525651e0c7c694d49984ed99edc6d12c))
+
 ## [0.7.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.6.0...v0.7.0) (2026-07-10)
 
 
