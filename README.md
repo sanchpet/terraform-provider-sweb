@@ -113,8 +113,30 @@ data "sweb_domain" "example" {
 }
 ```
 
-DNS records stay in the CLI/SDK: they are addressed by a per-type index that
-shifts as the zone changes, so there is no stable id to reconcile against.
+DNS records (A, AAAA, CNAME, MX, TXT, NS) are managed per-record with
+`sweb_dns_record` — bring an existing zone under Terraform and edit it there:
+
+```hcl
+resource "sweb_dns_record" "www" {
+  domain = "example.com"
+  type   = "A"
+  name   = "www" # empty or "@" for the apex
+  value  = "203.0.113.10"
+}
+
+resource "sweb_dns_record" "mail" {
+  domain   = "example.com"
+  type     = "MX"
+  value    = "mx1.example.com."
+  priority = 10
+}
+```
+
+The SpaceWeb API addresses records by a per-type index that shifts as the zone
+changes, so the record is identified by its **content** (type + host + value) and
+the index is re-derived on each read/delete; every attribute forces replacement,
+so a value change is a delete+create. SRV is not yet covered (its
+service/protocol/port/weight shape warrants a dedicated resource).
 
 ### Importing
 
