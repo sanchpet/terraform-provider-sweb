@@ -51,6 +51,12 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 		Value     string `json:"value"`
 		Priority  int    `json:"priority"`
 		SubDomain string `json:"subDomain"`
+		Service   string `json:"service"`
+		Protocol  string `json:"protocol"`
+		Target    string `json:"target"`
+		Port      int    `json:"port"`
+		Weight    int    `json:"weight"`
+		TTL       int    `json:"ttl"`
 	}
 	_ = json.Unmarshal(raw, &p)
 	if m.dnsRecords == nil {
@@ -87,6 +93,14 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 		rec.Domain = host
 	case "MX", "NS":
 		rec.Name = p.SubDomain
+	case "SRV":
+		rec.Name = p.SubDomain
+		rec.Service = p.Service
+		rec.Protocol = p.Protocol
+		rec.Target = p.Target
+		rec.Port = sweb.FlexInt(p.Port)
+		rec.Weight = sweb.FlexInt(p.Weight)
+		rec.TTL = sweb.FlexInt(p.TTL)
 	default: // A/AAAA/CNAME via editMain
 		rec.Name = p.Name
 	}
@@ -293,6 +307,8 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		result = m.editDNS(req.Params, "TXT", true)
 	case "editNS":
 		result = m.editDNS(req.Params, "NS", true)
+	case "editSrv":
+		result = m.editDNS(req.Params, "SRV", true)
 	default:
 		result = map[string]bool{"ok": true}
 	}

@@ -98,7 +98,7 @@ func (p *swebProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 func (p *swebProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewVPSResource, NewLocalNetworkResource, NewPTRRecordResource, NewBackupSettingsResource,
-		NewSubdomainResource, NewDomainRedirectResource, NewDNSRecordResource,
+		NewSubdomainResource, NewDomainRedirectResource, NewDNSRecordResource, NewDNSSRVRecordResource,
 	}
 }
 
