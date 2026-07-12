@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.9.0...v0.10.0) (2026-07-12)
+
+
+### Features
+
+* add sweb_dns_srv_record for SRV records ([#40](https://github.com/sanchpet/terraform-provider-sweb/issues/40)) ([1b00e84](https://github.com/sanchpet/terraform-provider-sweb/commit/1b00e840ce96a6e3a3cf95595b7327a25d85fe76))
+
 ## [0.9.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.8.0...v0.9.0) (2026-07-12)
 
 
