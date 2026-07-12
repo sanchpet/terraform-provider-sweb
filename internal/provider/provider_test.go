@@ -35,6 +35,63 @@ type mockSweb struct {
 	backupSet     map[string]sweb.BackupSettings // billingId → auto-backup schedule
 	subdomains    map[string][]string            // domain → subdomain machine labels
 	redirect      map[string]string              // domain → redirect URL
+	dnsRecords    map[string][]sweb.DNSRecord    // domain → DNS zone records
+}
+
+// editDNS applies an add/del to the mock zone, mirroring the real API's per-type
+// index addressing (host in Domain for TXT, Name otherwise). okSentinel is the
+// method's success value (integer 1 for editMx, boolean true for the rest).
+func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any) any {
+	var p struct {
+		Domain    string `json:"domain"`
+		Action    string `json:"action"`
+		Index     int    `json:"index"`
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		Value     string `json:"value"`
+		Priority  int    `json:"priority"`
+		SubDomain string `json:"subDomain"`
+	}
+	_ = json.Unmarshal(raw, &p)
+	if m.dnsRecords == nil {
+		m.dnsRecords = map[string][]sweb.DNSRecord{}
+	}
+	if p.Action == "del" {
+		kept := m.dnsRecords[p.Domain][:0]
+		for _, rec := range m.dnsRecords[p.Domain] {
+			if strings.EqualFold(rec.Type, p.Type) && int(rec.Index) == p.Index {
+				continue
+			}
+			kept = append(kept, rec)
+		}
+		m.dnsRecords[p.Domain] = kept
+		return okSentinel
+	}
+	rtype := fixedType
+	if rtype == "" {
+		rtype = strings.ToUpper(p.Type)
+	}
+	idx := 0
+	for _, rec := range m.dnsRecords[p.Domain] {
+		if strings.EqualFold(rec.Type, rtype) {
+			idx++
+		}
+	}
+	rec := sweb.DNSRecord{Type: rtype, Value: p.Value, Index: sweb.FlexInt(idx), Priority: sweb.FlexInt(p.Priority)}
+	switch rtype {
+	case "TXT":
+		host := p.SubDomain
+		if host == "" {
+			host = "@"
+		}
+		rec.Domain = host
+	case "MX", "NS":
+		rec.Name = p.SubDomain
+	default: // A/AAAA/CNAME via editMain
+		rec.Name = p.Name
+	}
+	m.dnsRecords[p.Domain] = append(m.dnsRecords[p.Domain], rec)
+	return okSentinel
 }
 
 type rpcReq struct {
@@ -220,6 +277,22 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 			"can_prolong": 1, "autoprolong": "no", "reg_price": 189, "transfer_price": -1,
 			"docRoot": "/home/e/example", "siteAlias": "default", "redirectUrl": m.redirect[p["domain"]],
 		}
+	case "info": // DNS zone (endpoint /domains/dns)
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		recs := m.dnsRecords[p["domain"]]
+		if recs == nil {
+			recs = []sweb.DNSRecord{}
+		}
+		result = recs
+	case "editMain":
+		result = m.editDNS(req.Params, "", true)
+	case "editMx":
+		result = m.editDNS(req.Params, "MX", 1)
+	case "editTxt":
+		result = m.editDNS(req.Params, "TXT", true)
+	case "editNS":
+		result = m.editDNS(req.Params, "NS", true)
 	default:
 		result = map[string]bool{"ok": true}
 	}
