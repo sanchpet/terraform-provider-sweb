@@ -91,6 +91,31 @@ It calls the same `getConstructorPlanId` resolver as the resource. The id is
 resolved **dynamically each plan**, so a catalog remap on SpaceWeb's side could
 change it — pin a literal `plan` if you need a frozen id.
 
+### Domain resources
+
+For a domain **already on the account** (registration itself is deliberately out
+of the provider — a paid, irreversible purchase; `terraform destroy` must never
+cancel a domain), the provider manages the parts that map cleanly onto Terraform:
+
+```hcl
+resource "sweb_subdomain" "shop" {
+  domain  = "example.com"
+  machine = "shop" # -> shop.example.com; destroy removes it
+}
+
+resource "sweb_domain_redirect" "example" {
+  domain = "example.com"
+  url    = "https://example.org" # destroy clears the redirect
+}
+
+data "sweb_domain" "example" {
+  domain = "example.com" # expiry, registrar, autoprolong, docroot, redirect
+}
+```
+
+DNS records stay in the CLI/SDK: they are addressed by a per-type index that
+shifts as the zone changes, so there is no stable id to reconcile against.
+
 ### Importing
 
 ```sh

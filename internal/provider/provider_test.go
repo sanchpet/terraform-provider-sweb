@@ -33,6 +33,8 @@ type mockSweb struct {
 	localAttached map[string]bool                // billingId → attached to the local network
 	ptr           map[string]string              // ip → PTR record
 	backupSet     map[string]sweb.BackupSettings // billingId → auto-backup schedule
+	subdomains    map[string][]string            // domain → subdomain machine labels
+	redirect      map[string]string              // domain → redirect URL
 }
 
 type rpcReq struct {
@@ -170,6 +172,54 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)
 		result = []sweb.BackupSettings{m.backupSet[p["billingId"]]}
+	case "createSubdomain":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		if m.subdomains == nil {
+			m.subdomains = map[string][]string{}
+		}
+		m.subdomains[p["domain"]] = append(m.subdomains[p["domain"]], p["machine"])
+		result = 1
+	case "removeSubdomain":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		kept := m.subdomains[p["domain"]][:0]
+		for _, machine := range m.subdomains[p["domain"]] {
+			if machine != p["machine"] {
+				kept = append(kept, machine)
+			}
+		}
+		m.subdomains[p["domain"]] = kept
+		result = 1
+	case "getSubdomains":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		refs := []any{}
+		for _, machine := range m.subdomains[p["domain"]] {
+			fqdn := machine + "." + p["domain"]
+			refs = append(refs, map[string]string{"value": fqdn, "name": fqdn})
+		}
+		result = refs
+	case "setRedirectVh":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		if m.redirect == nil {
+			m.redirect = map[string]string{}
+		}
+		m.redirect[p["domain"]] = p["redirect"]
+		result = 1
+	case "getRedirectVh":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		result = m.redirect[p["domain"]]
+	case "getDomainInfo":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		result = map[string]any{
+			"is_our": 1, "registrar": "TEST-REGISTRAR", "expired": "2027-01-01",
+			"can_prolong": 1, "autoprolong": "no", "reg_price": 189, "transfer_price": -1,
+			"docRoot": "/home/e/example", "siteAlias": "default", "redirectUrl": m.redirect[p["domain"]],
+		}
 	default:
 		result = map[string]bool{"ok": true}
 	}

@@ -96,11 +96,14 @@ func (p *swebProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 }
 
 func (p *swebProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewVPSResource, NewLocalNetworkResource, NewPTRRecordResource, NewBackupSettingsResource}
+	return []func() resource.Resource{
+		NewVPSResource, NewLocalNetworkResource, NewPTRRecordResource, NewBackupSettingsResource,
+		NewSubdomainResource, NewDomainRedirectResource,
+	}
 }
 
 func (p *swebProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{NewPlanDataSource}
+	return []func() datasource.DataSource{NewPlanDataSource, NewDomainDataSource}
 }
 
 func firstNonEmpty(vals ...string) string {
