@@ -135,8 +135,21 @@ resource "sweb_dns_record" "mail" {
 The SpaceWeb API addresses records by a per-type index that shifts as the zone
 changes, so the record is identified by its **content** (type + host + value) and
 the index is re-derived on each read/delete; every attribute forces replacement,
-so a value change is a delete+create. SRV is not yet covered (its
-service/protocol/port/weight shape warrants a dedicated resource).
+so a value change is a delete+create.
+
+SRV records have their own resource, `sweb_dns_srv_record`, because of their
+distinct shape (service/protocol/target/port/weight):
+
+```hcl
+resource "sweb_dns_srv_record" "autodiscover" {
+  domain   = "example.com"
+  service  = "autodiscover"
+  protocol = "tcp"
+  target   = "autodiscover.example.com."
+  port     = 443
+  priority = 5
+}
+```
 
 ### Importing
 
