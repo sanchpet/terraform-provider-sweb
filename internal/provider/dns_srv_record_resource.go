@@ -21,6 +21,7 @@ import (
 	"github.com/sanchpet/terraform-provider-sweb/internal/importid"
 
 	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/dns"
 )
 
 var (
@@ -141,7 +142,7 @@ func (r *dnsSRVRecordResource) Create(ctx context.Context, req resource.CreateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.DNS.EditSRV(ctx, plan.Domain.ValueString(), sweb.DNSActionAdd, srvRecord(plan, 0)); err != nil {
+	if err := r.client.DNS.EditSRV(ctx, plan.Domain.ValueString(), dns.ActionAdd, srvRecord(plan, 0)); err != nil {
 		resp.Diagnostics.AddError("Failed to create SRV record", err.Error())
 		return
 	}
@@ -199,7 +200,7 @@ func (r *dnsSRVRecordResource) Delete(ctx context.Context, req resource.DeleteRe
 	if !found {
 		return
 	}
-	if err := r.client.DNS.EditSRV(ctx, state.Domain.ValueString(), sweb.DNSActionRemove, sweb.SRVRecord{Index: int(rec.Index)}); err != nil {
+	if err := r.client.DNS.EditSRV(ctx, state.Domain.ValueString(), dns.ActionRemove, dns.SRVRecord{Index: int(rec.Index)}); err != nil {
 		resp.Diagnostics.AddError("Failed to delete SRV record", err.Error())
 		return
 	}
@@ -249,10 +250,10 @@ func (r *dnsSRVRecordResource) refresh(ctx context.Context, m *dnsSRVRecordModel
 
 // find locates the SRV record matching a resource's content (service, protocol,
 // host, target, port) and returns it with its current wire index.
-func (r *dnsSRVRecordResource) find(ctx context.Context, m dnsSRVRecordModel) (sweb.DNSRecord, bool, error) {
+func (r *dnsSRVRecordResource) find(ctx context.Context, m dnsSRVRecordModel) (dns.Record, bool, error) {
 	recs, err := r.client.DNS.Records(ctx, m.Domain.ValueString())
 	if err != nil {
-		return sweb.DNSRecord{}, false, err
+		return dns.Record{}, false, err
 	}
 	host := apexNorm(m.Name.ValueString())
 	for _, rec := range recs {
@@ -273,11 +274,11 @@ func (r *dnsSRVRecordResource) find(ctx context.Context, m dnsSRVRecordModel) (s
 		}
 		return rec, true, nil
 	}
-	return sweb.DNSRecord{}, false, nil
+	return dns.Record{}, false, nil
 }
 
-func srvRecord(m dnsSRVRecordModel, index int) sweb.SRVRecord {
-	return sweb.SRVRecord{
+func srvRecord(m dnsSRVRecordModel, index int) dns.SRVRecord {
+	return dns.SRVRecord{
 		Index:     index,
 		Priority:  int(m.Priority.ValueInt64()),
 		TTL:       int(m.TTL.ValueInt64()),
