@@ -205,6 +205,20 @@ Each has no stable server id, so identity is its content: the database `name`
 whole line). Cron positions are integers only — `"*"`, ranges and steps aren't
 expressible through the API.
 
+A free Let's Encrypt certificate is managed with `sweb_letsencrypt`:
+
+```hcl
+resource "sweb_letsencrypt" "site" {
+  domain      = "example.com"
+  autoprolong = true
+}
+```
+
+It is identified by the `domain` it covers; the issuance inputs
+(`wildcard`/`virtdom`/`ip`/`challenge`) force replacement, while `autoprolong`
+toggles in place. Issuance is asynchronous, so `apply` waits for the certificate
+to appear (bounded by the `create` timeout, default 10m).
+
 ### Importing
 
 ```sh
