@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.10.0...v0.11.0) (2026-07-13)
+
+
+### Features
+
+* tf-dns-import helper to adopt an existing DNS zone ([#42](https://github.com/sanchpet/terraform-provider-sweb/issues/42)) ([1a43064](https://github.com/sanchpet/terraform-provider-sweb/commit/1a43064d0bf487b4f0d0345cb0670b809e0b74e2))
+
 ## [0.10.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.9.0...v0.10.0) (2026-07-12)
 
 
