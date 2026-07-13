@@ -17,6 +17,7 @@ import (
 	"github.com/sanchpet/sweb-go-sdk/backup"
 	"github.com/sanchpet/sweb-go-sdk/dns"
 	"github.com/sanchpet/sweb-go-sdk/flex"
+	"github.com/sanchpet/sweb-go-sdk/vh/mail"
 	"github.com/sanchpet/sweb-go-sdk/vps"
 )
 
@@ -39,6 +40,7 @@ type mockSweb struct {
 	subdomains    map[string][]string        // domain → subdomain machine labels
 	redirect      map[string]string          // domain → redirect URL
 	dnsRecords    map[string][]dns.Record    // domain → DNS zone records
+	mailboxes     map[string][]mail.Mailbox  // domain → mailboxes (Mbox is the full address)
 }
 
 // editDNS applies an add/del to the mock zone, mirroring the real API's per-type
@@ -109,6 +111,17 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 	}
 	m.dnsRecords[p.Domain] = append(m.dnsRecords[p.Domain], rec)
 	return okSentinel
+}
+
+// mutateMailbox applies mut to the mailbox on domain whose local part matches
+// mbox, returning the sentinel 1 the mail setters expect.
+func (m *mockSweb) mutateMailbox(domain, mbox string, mut func(*mail.Mailbox)) int {
+	for i := range m.mailboxes[domain] {
+		if mailboxLocalPart(m.mailboxes[domain][i].Mbox) == mbox {
+			mut(&m.mailboxes[domain][i])
+		}
+	}
+	return 1
 }
 
 type rpcReq struct {
@@ -312,6 +325,66 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		result = m.editDNS(req.Params, "NS", true)
 	case "editSrv":
 		result = m.editDNS(req.Params, "SRV", true)
+	case "createMbox":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		if m.mailboxes == nil {
+			m.mailboxes = map[string][]mail.Mailbox{}
+		}
+		m.mailboxes[p["domain"]] = append(m.mailboxes[p["domain"]], mail.Mailbox{
+			Mbox: p["mbox"] + "@" + p["domain"], Quota: 1024, Comment: p["comment"],
+		})
+		// createMbox answers a rich NewMailbox object; only the shape is decoded.
+		result = map[string]any{"login": p["mbox"] + "@" + p["domain"], "password": p["password"]}
+	case "dropMbox":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		kept := m.mailboxes[p["domain"]][:0]
+		for _, mb := range m.mailboxes[p["domain"]] {
+			if mailboxLocalPart(mb.Mbox) != p["mbox"] {
+				kept = append(kept, mb)
+			}
+		}
+		m.mailboxes[p["domain"]] = kept
+		result = 1
+	case "getMailboxesList":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		boxes := m.mailboxes[p["domain"]]
+		if boxes == nil {
+			boxes = []mail.Mailbox{}
+		}
+		result = map[string]any{"list": boxes, "filterInfo": map[string]any{"totalCount": len(boxes)}}
+	case "changeMailboxPassword":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		result = m.mutateMailbox(p["domain"], p["mbox"], func(*mail.Mailbox) {}) // password not stored
+	case "updateComment":
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		result = m.mutateMailbox(p["domain"], p["mbox"], func(mb *mail.Mailbox) { mb.Comment = p["comment"] })
+	case "updateAntispamState":
+		var p struct {
+			Domain string `json:"domain"`
+			Mbox   string `json:"mbox"`
+			Value  int    `json:"value"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		result = m.mutateMailbox(p.Domain, p.Mbox, func(mb *mail.Mailbox) { mb.Antispam = flex.Int(p.Value) })
+	case "changeMailboxSpf":
+		var p struct {
+			Domain string `json:"domain"`
+			Mbox   string `json:"mbox"`
+			TurnOn bool   `json:"turnOn"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		result = m.mutateMailbox(p.Domain, p.Mbox, func(mb *mail.Mailbox) {
+			if p.TurnOn {
+				mb.SPF = 1
+			} else {
+				mb.SPF = 0
+			}
+		})
 	default:
 		result = map[string]bool{"ok": true}
 	}
