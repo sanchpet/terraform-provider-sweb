@@ -18,6 +18,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	"github.com/sanchpet/terraform-provider-sweb/internal/importid"
+
 	sweb "github.com/sanchpet/sweb-go-sdk"
 )
 
@@ -289,8 +291,8 @@ func srvRecord(m dnsSRVRecordModel, index int) sweb.SRVRecord {
 }
 
 func srvRecordID(m dnsSRVRecordModel) string {
-	return strings.Join([]string{
+	return importid.SRV(
 		m.Domain.ValueString(), m.Service.ValueString(), m.Protocol.ValueString(),
-		m.Name.ValueString(), m.Target.ValueString(), strconv.FormatInt(m.Port.ValueInt64(), 10),
-	}, "/")
+		m.Name.ValueString(), m.Target.ValueString(), int(m.Port.ValueInt64()),
+	)
 }
