@@ -166,6 +166,19 @@ from the API). Notes:
 - `ssh_key` is create-only and not recoverable from the API; re-state it in HCL.
 - Use `terraform plan -generate-config-out=...` to materialise matching HCL.
 
+**Importing a whole DNS zone at once.** Rather than hand-write an `import {}` block
+per record, pipe a zone dump through the bundled `tf-dns-import` helper — it emits
+correct, unique ids for every record (round-robin, DKIM TXT, apex, SRV):
+
+```sh
+export TF_VAR_sweb_token="$(sweb token --profile hosting)"   # the account that owns the domain
+sweb dns records example.com -o json | tf-dns-import example.com > imports.tf
+terraform plan -generate-config-out=generated.tf
+```
+
+See the [Importing an existing DNS zone](docs/guides/import-existing-zone.md) guide
+for the full walkthrough, including the multi-account credential gotcha.
+
 ## In-place updates & limitations
 
 - **In-place:** `alias` (rename) and `plan` / `cpu` / `ram` / `disk` (resize via
