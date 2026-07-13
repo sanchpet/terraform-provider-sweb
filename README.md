@@ -169,6 +169,42 @@ Like a DNS record, a mailbox has no stable server id: it is identified by its
 replacement, while `password`, `antispam`, `spf` and `comment` update in place.
 `quota` is read-only (the API assigns it and exposes no create/update control).
 
+### Shared-hosting resources
+
+Three more content-addressed resources cover the shared-hosting surface — a MySQL
+database, a website, and a crontab entry:
+
+```hcl
+resource "sweb_database" "app" {
+  name     = "appdb"
+  password = var.database_password
+  comment  = "application database"
+}
+
+resource "sweb_site" "shop" {
+  alias    = "shop"
+  doc_root = "shop"
+  domain   = "example.com"
+}
+
+resource "sweb_cron_task" "nightly" {
+  minute  = 30
+  hour    = 3
+  day     = 1
+  month   = 12
+  weekday = 7
+  command = "/usr/bin/php /home/example/backup.php"
+}
+```
+
+Each has no stable server id, so identity is its content: the database `name`
+(the API may store it account-prefixed, exposed as `full_name`), the site
+`doc_root`, the cron entry's raw crontab line. A `sweb_database` updates
+`password`/`comment` in place; a `sweb_site` renames its `alias` in place; a
+`sweb_cron_task` is fully replace-on-change (the API edits a task by replacing its
+whole line). Cron positions are integers only — `"*"`, ranges and steps aren't
+expressible through the API.
+
 ### Importing
 
 ```sh
