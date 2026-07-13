@@ -15,6 +15,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	"github.com/sanchpet/terraform-provider-sweb/internal/importid"
+
 	sweb "github.com/sanchpet/sweb-go-sdk"
 )
 
@@ -224,7 +226,7 @@ func isMX(m dnsRecordModel) bool         { return recordType(m) == "MX" }
 
 // dnsRecordID is the stable, content-derived id.
 func dnsRecordID(m dnsRecordModel) string {
-	return strings.Join([]string{m.Domain.ValueString(), recordType(m), m.Name.ValueString(), m.Value.ValueString()}, "/")
+	return importid.Record(m.Domain.ValueString(), recordType(m), m.Name.ValueString(), m.Value.ValueString())
 }
 
 // findDNSRecord locates the zone record matching a resource's content (type,
@@ -251,10 +253,7 @@ func findDNSRecord(recs []sweb.DNSRecord, m dnsRecordModel) (sweb.DNSRecord, boo
 
 // dnsHost returns a record's host label, normalized so the apex is "".
 func dnsHost(rec sweb.DNSRecord) string {
-	if strings.EqualFold(rec.Type, "TXT") {
-		return apexNorm(rec.Domain)
-	}
-	return apexNorm(rec.Name)
+	return importid.Host(rec.Type, rec.Name, rec.Domain)
 }
 
 // dnsValueMatches compares record values, ignoring a trailing dot for the
@@ -269,9 +268,4 @@ func dnsValueMatches(recType, got, want string) bool {
 	}
 }
 
-func apexNorm(s string) string {
-	if s == "@" {
-		return ""
-	}
-	return s
-}
+func apexNorm(s string) string { return importid.Apex(s) }
