@@ -17,6 +17,9 @@ import (
 	"github.com/sanchpet/sweb-go-sdk/backup"
 	"github.com/sanchpet/sweb-go-sdk/dns"
 	"github.com/sanchpet/sweb-go-sdk/flex"
+	"github.com/sanchpet/sweb-go-sdk/sites"
+	"github.com/sanchpet/sweb-go-sdk/vh/cron"
+	"github.com/sanchpet/sweb-go-sdk/vh/hosting"
 	"github.com/sanchpet/sweb-go-sdk/vh/mail"
 	"github.com/sanchpet/sweb-go-sdk/vps"
 )
@@ -41,6 +44,9 @@ type mockSweb struct {
 	redirect      map[string]string          // domain → redirect URL
 	dnsRecords    map[string][]dns.Record    // domain → DNS zone records
 	mailboxes     map[string][]mail.Mailbox  // domain → mailboxes (Mbox is the full address)
+	sites         []sites.Site               // account-level websites (identity = DocRoot)
+	cronTasks     []cron.Task                // account-level crontab entries (identity = Task line)
+	databases     []hosting.Database         // account-level databases (identity = Name)
 }
 
 // editDNS applies an add/del to the mock zone, mirroring the real API's per-type
@@ -124,6 +130,26 @@ func (m *mockSweb) mutateMailbox(domain, mbox string, mut func(*mail.Mailbox)) i
 	return 1
 }
 
+// cronSchedule decodes the named-key schedule params addTask/editTask send.
+type cronSchedule struct {
+	Minute  int    `json:"minute"`
+	Hour    int    `json:"hour"`
+	Day     int    `json:"day"`
+	Month   int    `json:"month"`
+	Weekday int    `json:"weekday"`
+	Command string `json:"command"`
+}
+
+// cronTaskFrom builds a live cron.Task from a schedule, mirroring the API: the
+// Task field is the raw crontab line (the removeTask key).
+func cronTaskFrom(p cronSchedule) cron.Task {
+	return cron.Task{
+		Minute: flex.Int(p.Minute), Hour: flex.Int(p.Hour), Day: flex.Int(p.Day),
+		Month: flex.Int(p.Month), Weekday: flex.Int(p.Weekday), Command: p.Command,
+		Task: fmt.Sprintf("%d %d %d %d %d %s", p.Minute, p.Hour, p.Day, p.Month, p.Weekday, p.Command),
+	}
+}
+
 type rpcReq struct {
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
@@ -167,7 +193,8 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		})
 		result = map[string]bool{"ok": true}
 	case "index":
-		if strings.HasSuffix(r.URL.Path, "/vps/ip") {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/vps/ip"):
 			// IP inventory (endpoint /vps/ip): report the local IP if attached.
 			var p map[string]string
 			_ = json.Unmarshal(req.Params, &p)
@@ -179,9 +206,101 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 				"ips": []any{}, "protected_ips": []any{}, "local_ip": local,
 				"vps": map[string]any{"billingId": p["billingId"], "isEmpty": "0", "ordered_ip_count": "1"},
 			}
-		} else {
+		case strings.HasSuffix(r.URL.Path, "/sites"):
+			result = m.sites // website inventory (endpoint /sites)
+		default:
 			result = m.nodes
 		}
+	case "add": // /sites: create website
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		m.seq++
+		m.sites = append(m.sites, sites.Site{
+			ID: flex.Int(m.seq), DocRoot: p["docRoot"], DocRootFull: "/home/" + p["docRoot"], Alias: p["alias"],
+		})
+		result = 1
+	case "edit": // /sites: rename / move website
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		for i := range m.sites {
+			if m.sites[i].DocRoot == p["docRoot"] {
+				m.sites[i].Alias = p["alias"]
+				if p["docRootNew"] != "" {
+					m.sites[i].DocRoot = p["docRootNew"]
+					m.sites[i].DocRootFull = "/home/" + p["docRootNew"]
+				}
+			}
+		}
+		result = 1
+	case "del": // /sites: delete website
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		kept := m.sites[:0]
+		for _, s := range m.sites {
+			if s.DocRoot != p["docRoot"] {
+				kept = append(kept, s)
+			}
+		}
+		m.sites = kept
+		result = 1
+	case "getTasks": // /vh/cron: list crontab entries
+		result = m.cronTasks
+	case "addTask": // /vh/cron: add crontab entry
+		var p cronSchedule
+		_ = json.Unmarshal(req.Params, &p)
+		m.cronTasks = append(m.cronTasks, cronTaskFrom(p))
+		result = 1
+	case "removeTask": // /vh/cron: remove crontab entry
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		kept := m.cronTasks[:0]
+		for _, t := range m.cronTasks {
+			if t.Task != p["task"] {
+				kept = append(kept, t)
+			}
+		}
+		m.cronTasks = kept
+		result = 1
+	case "databaseGetList": // /vh/hosting: list databases
+		dbs := m.databases
+		if dbs == nil {
+			dbs = []hosting.Database{}
+		}
+		result = map[string]any{"list": dbs, "params": map[string]any{"server": "mysql-1"}}
+	case "databaseMysqlCreate": // /vh/hosting: create MySQL database
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		version := p["dbVersion"]
+		if version == "" {
+			version = "8.0"
+		}
+		m.databases = append(m.databases, hosting.Database{
+			Type: "mysql", Name: p["dbName"], Login: p["dbName"], Comment: p["dbComment"],
+			Version: version, Charset: "utf8mb4",
+		})
+		result = 1
+	case "databaseMysqlDelete": // /vh/hosting: delete MySQL database
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		kept := m.databases[:0]
+		for _, db := range m.databases {
+			if db.Name != p["dbName"] {
+				kept = append(kept, db)
+			}
+		}
+		m.databases = kept
+		result = 1
+	case "databaseMysqlChangePass": // /vh/hosting: change password (not stored)
+		result = 1
+	case "databaseEditComment": // /vh/hosting: edit database comment
+		var p map[string]string
+		_ = json.Unmarshal(req.Params, &p)
+		for i := range m.databases {
+			if m.databases[i].Name == p["dbName"] {
+				m.databases[i].Comment = p["dbComment"]
+			}
+		}
+		result = 1
 	case "addLocal":
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)

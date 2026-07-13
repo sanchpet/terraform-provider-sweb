@@ -99,7 +99,7 @@ func (p *swebProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewVPSResource, NewLocalNetworkResource, NewPTRRecordResource, NewBackupSettingsResource,
 		NewSubdomainResource, NewDomainRedirectResource, NewDNSRecordResource, NewDNSSRVRecordResource,
-		NewMailboxResource,
+		NewMailboxResource, NewDatabaseResource, NewSiteResource, NewCronTaskResource,
 	}
 }
 
