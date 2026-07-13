@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/dns"
 )
 
 // TestBlocks pins the import-block output for the tricky record shapes: apex,
 // wildcard, round-robin (same host, distinct values -> distinct labels & ids),
 // TXT host in the `domain` field, a base64 TXT value, and SRV.
 func TestBlocks(t *testing.T) {
-	recs := []sweb.DNSRecord{
+	recs := []dns.Record{
 		{Type: "A", Name: "", Value: "185.158.115.81"},
 		{Type: "A", Name: "*.infra", Value: "168.222.202.148"},
 		{Type: "A", Name: "*.infra", Value: "77.222.52.113"},

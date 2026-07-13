@@ -21,6 +21,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/apierr"
+	"github.com/sanchpet/sweb-go-sdk/vps"
 )
 
 // invalidParamsCode is the SpaceWeb JSON-RPC code for "invalid params /
@@ -222,7 +224,7 @@ func (r *vpsResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	createReq := sweb.CreateVPSRequest{
+	createReq := vps.CreateRequest{
 		DistributiveID: int(plan.Distributive.ValueInt64()),
 		VPSPlanID:      planID,
 		Datacenter:     int(plan.Datacenter.ValueInt64()),
@@ -235,7 +237,7 @@ func (r *vpsResource) Create(ctx context.Context, req resource.CreateRequest, re
 	// (before/after) that identifies the new node is only unambiguous when a single
 	// create runs at a time (see createMu). Holding the lock through waitForNewVPS
 	// also serializes the create orders the API can't take concurrently.
-	var node sweb.VPS
+	var node vps.VPS
 	ok := func() bool {
 		createMu.Lock()
 		defer createMu.Unlock()
@@ -375,7 +377,7 @@ func (r *vpsResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return
 	}
 
-	var apiErr *sweb.Error
+	var apiErr *apierr.Error
 	if errors.As(err, &apiErr) && apiErr.Code == invalidParamsCode {
 		resp.Diagnostics.AddError(
 			"VPS cannot be deleted yet",
@@ -423,7 +425,7 @@ func (r *vpsResource) ImportState(ctx context.Context, req resource.ImportStateR
 
 // applyAPIState copies the server-reported fields of node into m. Create-only
 // secrets (ssh_key) are intentionally left as-is (the API never returns them).
-func (r *vpsResource) applyAPIState(m *vpsModel, node sweb.VPS) {
+func (r *vpsResource) applyAPIState(m *vpsModel, node vps.VPS) {
 	m.ID = types.StringValue(node.BillingID)
 	m.BillingID = types.StringValue(node.BillingID)
 	m.UID = types.StringValue(node.UID)
@@ -437,7 +439,7 @@ func (r *vpsResource) applyAPIState(m *vpsModel, node sweb.VPS) {
 // resource refreshes cpu/ram/disk; a plan resource refreshes plan; neither
 // adopts the other's fields. `category` is configurator-only and not reported by
 // the API, so it is never refreshed (drift on it is not detected).
-func refreshInputs(m *vpsModel, node sweb.VPS) {
+func refreshInputs(m *vpsModel, node vps.VPS) {
 	if !m.CPU.IsNull() {
 		m.CPU = types.Int64Value(int64(node.CPU))
 	}
@@ -528,7 +530,7 @@ func (r *vpsResource) listBillingIDs(ctx context.Context) (map[string]struct{}, 
 	return ids, nil
 }
 
-func (r *vpsResource) findByBillingID(ctx context.Context, billingID string) (*sweb.VPS, error) {
+func (r *vpsResource) findByBillingID(ctx context.Context, billingID string) (*vps.VPS, error) {
 	list, err := r.client.VPS.List(ctx)
 	if err != nil {
 		return nil, err
@@ -543,14 +545,14 @@ func (r *vpsResource) findByBillingID(ctx context.Context, billingID string) (*s
 
 // waitForNewVPS polls List until a billing id not present in `before` appears
 // and the node reports running, or ctx/timeout is exhausted.
-func (r *vpsResource) waitForNewVPS(ctx context.Context, before map[string]struct{}, timeout time.Duration) (sweb.VPS, error) {
+func (r *vpsResource) waitForNewVPS(ctx context.Context, before map[string]struct{}, timeout time.Duration) (vps.VPS, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	var last sweb.VPS
+	var last vps.VPS
 	found := false
 	for {
 		list, err := r.client.VPS.List(ctx)
@@ -571,7 +573,7 @@ func (r *vpsResource) waitForNewVPS(ctx context.Context, before map[string]struc
 			if found {
 				return last, nil // appeared but not yet "running" — return what we have
 			}
-			return sweb.VPS{}, fmt.Errorf("timed out waiting for the new VPS to appear")
+			return vps.VPS{}, fmt.Errorf("timed out waiting for the new VPS to appear")
 		case <-ticker.C:
 		}
 	}

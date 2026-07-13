@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/domains"
 )
 
 var (
@@ -159,7 +160,7 @@ func subdomainID(domain, machine string) string { return domain + "/" + machine 
 // subdomainPresent reports whether machine.domain appears in the getSubdomains
 // list. The API returns each subdomain as its full name (encoded and readable),
 // so match against "<machine>.<domain>".
-func subdomainPresent(subs []sweb.SubdomainRef, domain, machine string) bool {
+func subdomainPresent(subs []domains.SubdomainRef, domain, machine string) bool {
 	fqdn := machine + "." + domain
 	for _, s := range subs {
 		if s.Value == fqdn || s.Name == fqdn {

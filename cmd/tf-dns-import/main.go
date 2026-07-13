@@ -25,7 +25,7 @@ import (
 
 	"github.com/sanchpet/terraform-provider-sweb/internal/importid"
 
-	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/dns"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func run(domain string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var recs []sweb.DNSRecord
+	var recs []dns.Record
 	if err := json.Unmarshal(raw, &recs); err != nil {
 		return fmt.Errorf("parse zone json (expected `sweb dns records %s -o json`): %w", domain, err)
 	}
@@ -58,7 +58,7 @@ func run(domain string, in io.Reader, out io.Writer) error {
 }
 
 // blocks renders one import{} block per record, with unique HCL labels.
-func blocks(domain string, recs []sweb.DNSRecord) []string {
+func blocks(domain string, recs []dns.Record) []string {
 	seen := map[string]int{}
 	var out []string
 	for _, rec := range recs {

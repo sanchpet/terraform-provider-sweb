@@ -14,7 +14,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 
-	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/backup"
+	"github.com/sanchpet/sweb-go-sdk/dns"
+	"github.com/sanchpet/sweb-go-sdk/flex"
+	"github.com/sanchpet/sweb-go-sdk/vps"
 )
 
 // testAccProtoV6ProviderFactories wires the in-process provider for acceptance
@@ -28,14 +31,14 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 // lifecycle without touching (or billing) the real service.
 type mockSweb struct {
 	mu            sync.Mutex
-	nodes         []sweb.VPS
+	nodes         []vps.VPS
 	seq           int
-	localAttached map[string]bool                // billingId → attached to the local network
-	ptr           map[string]string              // ip → PTR record
-	backupSet     map[string]sweb.BackupSettings // billingId → auto-backup schedule
-	subdomains    map[string][]string            // domain → subdomain machine labels
-	redirect      map[string]string              // domain → redirect URL
-	dnsRecords    map[string][]sweb.DNSRecord    // domain → DNS zone records
+	localAttached map[string]bool            // billingId → attached to the local network
+	ptr           map[string]string          // ip → PTR record
+	backupSet     map[string]backup.Settings // billingId → auto-backup schedule
+	subdomains    map[string][]string        // domain → subdomain machine labels
+	redirect      map[string]string          // domain → redirect URL
+	dnsRecords    map[string][]dns.Record    // domain → DNS zone records
 }
 
 // editDNS applies an add/del to the mock zone, mirroring the real API's per-type
@@ -60,7 +63,7 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 	}
 	_ = json.Unmarshal(raw, &p)
 	if m.dnsRecords == nil {
-		m.dnsRecords = map[string][]sweb.DNSRecord{}
+		m.dnsRecords = map[string][]dns.Record{}
 	}
 	if p.Action == "del" {
 		kept := m.dnsRecords[p.Domain][:0]
@@ -83,7 +86,7 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 			idx++
 		}
 	}
-	rec := sweb.DNSRecord{Type: rtype, Value: p.Value, Index: sweb.FlexInt(idx), Priority: sweb.FlexInt(p.Priority)}
+	rec := dns.Record{Type: rtype, Value: p.Value, Index: flex.Int(idx), Priority: flex.Int(p.Priority)}
 	switch rtype {
 	case "TXT":
 		host := p.SubDomain
@@ -98,9 +101,9 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 		rec.Service = p.Service
 		rec.Protocol = p.Protocol
 		rec.Target = p.Target
-		rec.Port = sweb.FlexInt(p.Port)
-		rec.Weight = sweb.FlexInt(p.Weight)
-		rec.TTL = sweb.FlexInt(p.TTL)
+		rec.Port = flex.Int(p.Port)
+		rec.Weight = flex.Int(p.Weight)
+		rec.TTL = flex.Int(p.TTL)
 	default: // A/AAAA/CNAME via editMain
 		rec.Name = p.Name
 	}
@@ -133,10 +136,10 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 	case "getConstructorPlanId":
 		result = 379
 	case "create":
-		var p sweb.CreateVPSRequest
+		var p vps.CreateRequest
 		_ = json.Unmarshal(req.Params, &p)
 		m.seq++
-		m.nodes = append(m.nodes, sweb.VPS{
+		m.nodes = append(m.nodes, vps.VPS{
 			BillingID:    fmt.Sprintf("petrovpet2_vps_%d", m.seq),
 			UID:          fmt.Sprintf("uid-%d", m.seq),
 			Name:         p.Alias,
@@ -145,8 +148,8 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 			CPU:          2,
 			RAM:          6,
 			Disk:         "15 ГБ", // index reports disk as a localized string, not diskGb
-			PlanID:       sweb.FlexInt(p.VPSPlanID),
-			OSDistrID:    sweb.FlexInt(p.DistributiveID),
+			PlanID:       flex.Int(p.VPSPlanID),
+			OSDistrID:    flex.Int(p.DistributiveID),
 			DatacenterID: strconv.Itoa(p.Datacenter),
 		})
 		result = map[string]bool{"ok": true}
@@ -207,7 +210,7 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(req.Params, &p)
 		for i := range m.nodes {
 			if m.nodes[i].BillingID == p.BillingID {
-				m.nodes[i].PlanID = sweb.FlexInt(p.PlanID)
+				m.nodes[i].PlanID = flex.Int(p.PlanID)
 			}
 		}
 		result = 1
@@ -232,17 +235,17 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(req.Params, &p)
 		if m.backupSet == nil {
-			m.backupSet = map[string]sweb.BackupSettings{}
+			m.backupSet = map[string]backup.Settings{}
 		}
-		m.backupSet[p.BillingID] = sweb.BackupSettings{
-			Mode: p.Mode, Frequency: sweb.FlexInt(p.Frequency), Time: sweb.FlexInt(p.Time),
+		m.backupSet[p.BillingID] = backup.Settings{
+			Mode: p.Mode, Frequency: flex.Int(p.Frequency), Time: flex.Int(p.Time),
 			NextDataBackup: "2026-07-17",
 		}
 		result = 1
 	case "getSettings":
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)
-		result = []sweb.BackupSettings{m.backupSet[p["billingId"]]}
+		result = []backup.Settings{m.backupSet[p["billingId"]]}
 	case "createSubdomain":
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)
@@ -296,7 +299,7 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(req.Params, &p)
 		recs := m.dnsRecords[p["domain"]]
 		if recs == nil {
-			recs = []sweb.DNSRecord{}
+			recs = []dns.Record{}
 		}
 		result = recs
 	case "editMain":

@@ -18,6 +18,7 @@ import (
 	"github.com/sanchpet/terraform-provider-sweb/internal/importid"
 
 	sweb "github.com/sanchpet/sweb-go-sdk"
+	"github.com/sanchpet/sweb-go-sdk/dns"
 )
 
 var (
@@ -118,7 +119,7 @@ func (r *dnsRecordResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.AddError("Missing MX priority", "an MX record requires `priority`.")
 		return
 	}
-	if err := r.edit(ctx, sweb.DNSActionAdd, plan, 0); err != nil {
+	if err := r.edit(ctx, dns.ActionAdd, plan, 0); err != nil {
 		resp.Diagnostics.AddError("Failed to create DNS record", err.Error())
 		return
 	}
@@ -178,7 +179,7 @@ func (r *dnsRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	if !found {
 		return // already gone
 	}
-	if err := r.edit(ctx, sweb.DNSActionRemove, state, int(rec.Index)); err != nil {
+	if err := r.edit(ctx, dns.ActionRemove, state, int(rec.Index)); err != nil {
 		resp.Diagnostics.AddError("Failed to delete DNS record", err.Error())
 		return
 	}
@@ -204,19 +205,19 @@ func (r *dnsRecordResource) ImportState(ctx context.Context, req resource.Import
 
 // edit dispatches an add/remove to the SDK method for the record's type. For a
 // remove, index is the record's current wire index (re-derived by the caller).
-func (r *dnsRecordResource) edit(ctx context.Context, action sweb.DNSAction, m dnsRecordModel, index int) error {
+func (r *dnsRecordResource) edit(ctx context.Context, action dns.Action, m dnsRecordModel, index int) error {
 	domain := m.Domain.ValueString()
 	name := apexNorm(m.Name.ValueString())
 	value := m.Value.ValueString()
 	switch recordType(m) {
 	case "A", "AAAA", "CNAME":
-		return r.client.DNS.EditMain(ctx, domain, action, sweb.MainRecord{Index: index, Name: name, Type: recordType(m), Value: value})
+		return r.client.DNS.EditMain(ctx, domain, action, dns.MainRecord{Index: index, Name: name, Type: recordType(m), Value: value})
 	case "NS":
 		return r.client.DNS.EditNS(ctx, domain, action, index, name, value)
 	case "TXT":
 		return r.client.DNS.EditTXT(ctx, domain, action, index, name, value)
 	case "MX":
-		return r.client.DNS.EditMX(ctx, domain, action, sweb.MXRecord{Index: index, Priority: int(m.Priority.ValueInt64()), Value: value, SubDomain: name})
+		return r.client.DNS.EditMX(ctx, domain, action, dns.MXRecord{Index: index, Priority: int(m.Priority.ValueInt64()), Value: value, SubDomain: name})
 	}
 	return fmt.Errorf("unsupported record type %q", m.Type.ValueString())
 }
@@ -233,7 +234,7 @@ func dnsRecordID(m dnsRecordModel) string {
 // host, value), returning it and its current wire index. The host lives in the
 // Domain field for TXT and in Name for the other types; CNAME/NS/MX targets are
 // compared trailing-dot-insensitively.
-func findDNSRecord(recs []sweb.DNSRecord, m dnsRecordModel) (sweb.DNSRecord, bool) {
+func findDNSRecord(recs []dns.Record, m dnsRecordModel) (dns.Record, bool) {
 	want := recordType(m)
 	host := apexNorm(m.Name.ValueString())
 	value := m.Value.ValueString()
@@ -248,11 +249,11 @@ func findDNSRecord(recs []sweb.DNSRecord, m dnsRecordModel) (sweb.DNSRecord, boo
 			return rec, true
 		}
 	}
-	return sweb.DNSRecord{}, false
+	return dns.Record{}, false
 }
 
 // dnsHost returns a record's host label, normalized so the apex is "".
-func dnsHost(rec sweb.DNSRecord) string {
+func dnsHost(rec dns.Record) string {
 	return importid.Host(rec.Type, rec.Name, rec.Domain)
 }
 
