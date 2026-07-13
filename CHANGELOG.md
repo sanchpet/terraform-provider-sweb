@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.11.0...v0.12.0) (2026-07-13)
+
+
+### Features
+
+* add sweb_letsencrypt resource ([#48](https://github.com/sanchpet/terraform-provider-sweb/issues/48)) ([d0804c7](https://github.com/sanchpet/terraform-provider-sweb/commit/d0804c7f87fbfae6b341954182834b44181c8dc0))
+* hosting database, site and cron resources ([#47](https://github.com/sanchpet/terraform-provider-sweb/issues/47)) ([a088c41](https://github.com/sanchpet/terraform-provider-sweb/commit/a088c41b0e3bc3d6345e0f12df69d1679b8a04f4))
+* **mailbox:** add sweb_mailbox resource ([#45](https://github.com/sanchpet/terraform-provider-sweb/issues/45)) ([86459e0](https://github.com/sanchpet/terraform-provider-sweb/commit/86459e0e2fc79f2d812c9c7de15bca3826609638))
+
 ## [0.11.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.10.0...v0.11.0) (2026-07-13)
 
 
