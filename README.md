@@ -151,6 +151,24 @@ resource "sweb_dns_srv_record" "autodiscover" {
 }
 ```
 
+Mailboxes on a mail domain are managed with `sweb_mailbox`:
+
+```hcl
+resource "sweb_mailbox" "info" {
+  domain   = "example.com"
+  name     = "info" # -> info@example.com
+  password = var.mailbox_password
+  antispam = "medium" # hard | medium | soft | off
+  spf      = true
+  comment  = "shared inbox"
+}
+```
+
+Like a DNS record, a mailbox has no stable server id: it is identified by its
+**content** — the mail `domain` plus the local-part `name` — so those two force
+replacement, while `password`, `antispam`, `spf` and `comment` update in place.
+`quota` is read-only (the API assigns it and exposes no create/update control).
+
 ### Importing
 
 ```sh
