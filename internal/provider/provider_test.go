@@ -21,6 +21,7 @@ import (
 	"github.com/sanchpet/sweb-go-sdk/vh/cron"
 	"github.com/sanchpet/sweb-go-sdk/vh/hosting"
 	"github.com/sanchpet/sweb-go-sdk/vh/mail"
+	"github.com/sanchpet/sweb-go-sdk/vh/ssl"
 	"github.com/sanchpet/sweb-go-sdk/vps"
 )
 
@@ -47,6 +48,7 @@ type mockSweb struct {
 	sites         []sites.Site               // account-level websites (identity = DocRoot)
 	cronTasks     []cron.Task                // account-level crontab entries (identity = Task line)
 	databases     []hosting.Database         // account-level databases (identity = Name)
+	certs         []ssl.Certificate          // account-level SSL certificates (identity = Domain)
 }
 
 // editDNS applies an add/del to the mock zone, mirroring the real API's per-type
@@ -208,9 +210,45 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 			}
 		case strings.HasSuffix(r.URL.Path, "/sites"):
 			result = m.sites // website inventory (endpoint /sites)
+		case strings.HasSuffix(r.URL.Path, "/vh/ssl"):
+			result = map[string]any{"list": m.certs, "filterInfo": map[string]any{"totalCount": len(m.certs)}}
 		default:
 			result = m.nodes
 		}
+	case "installLetsEncrypt": // /vh/ssl: issue a free Let's Encrypt certificate
+		var p map[string]any
+		_ = json.Unmarshal(req.Params, &p)
+		m.seq++
+		m.certs = append(m.certs, ssl.Certificate{
+			ID: flex.Int(m.seq), Status: "active", Domain: fmt.Sprint(p["domain"]),
+			Name: "Let's Encrypt", ValidTo: "2027-01-01", Autoprolong: false,
+		})
+		result = 1
+	case "editAutoprolong": // /vh/ssl: toggle auto-prolongation
+		var p struct {
+			CertificateID int  `json:"certificateId"`
+			Autoprolong   bool `json:"autoprolong"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		for i := range m.certs {
+			if int(m.certs[i].ID) == p.CertificateID {
+				m.certs[i].Autoprolong = p.Autoprolong
+			}
+		}
+		result = 1
+	case "removeCertificate": // /vh/ssl: delete a certificate
+		var p struct {
+			CertificateID int `json:"certificateId"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		kept := m.certs[:0]
+		for _, c := range m.certs {
+			if int(c.ID) != p.CertificateID {
+				kept = append(kept, c)
+			}
+		}
+		m.certs = kept
+		result = 1
 	case "add": // /sites: create website
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)
