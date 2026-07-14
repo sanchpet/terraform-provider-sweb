@@ -1,35 +1,11 @@
 package provider
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/provider"
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	tftest "github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
-
-// dbaasTestProvider wraps the real provider but adds the DBaaS resource to its
-// registry. In this branch provider.go does not yet register
-// NewDBaaSInstanceResource (the orchestrator wires all cloud-tier resources in
-// during integration), so the acceptance test serves the resource through this
-// thin override — reusing the real schema/Configure via the embedded provider.
-type dbaasTestProvider struct{ *swebProvider }
-
-func (p *dbaasTestProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return append(p.swebProvider.Resources(ctx), NewDBaaSInstanceResource)
-}
-
-// dbaasProtoV6ProviderFactories serves the provider with the DBaaS resource wired
-// in, independent of the shared factory.
-var dbaasProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
-	"sweb": providerserver.NewProtocol6WithError(func() provider.Provider {
-		return &dbaasTestProvider{swebProvider: &swebProvider{version: "test"}}
-	}()),
-}
 
 // TestAccDBaaSInstanceResource exercises create → read → update → import → destroy
 // of a managed-database cluster against the mock (createInstance/index/
@@ -41,7 +17,7 @@ func TestAccDBaaSInstanceResource(t *testing.T) {
 	defer mock.Close()
 
 	tftest.Test(t, tftest.TestCase{
-		ProtoV6ProviderFactories: dbaasProtoV6ProviderFactories,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []tftest.TestStep{
 			{ // create
 				Config: testAccDBaaSInstanceConfig(mock.URL, 100, "analytics", "app", "S3cret!"),

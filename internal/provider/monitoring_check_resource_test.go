@@ -1,47 +1,11 @@
 package provider
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/provider"
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
-
-// monitoringCheckTestFactories wires an in-process provider that additionally
-// registers sweb_monitoring_check. The shared provider's Resources() list is
-// owned by the orchestrator (which registers NewMonitoringCheckResource on
-// merge), so this branch adds the resource locally for its own acceptance test
-// rather than editing provider.go.
-var monitoringCheckTestFactories = map[string]func() (tfprotov6.ProviderServer, error){
-	"sweb": providerserver.NewProtocol6WithError(&monitoringCheckTestProvider{swebProvider{version: "test"}}),
-}
-
-// monitoringCheckTestProvider embeds the real provider and appends the
-// monitoring-check resource to its registry.
-type monitoringCheckTestProvider struct{ swebProvider }
-
-// Resources appends the monitoring-check factory, unless the shared registry
-// already carries it (once the orchestrator registers it on merge, the append
-// would otherwise duplicate the type name and panic).
-func (p *monitoringCheckTestProvider) Resources(ctx context.Context) []func() fwresource.Resource {
-	base := p.swebProvider.Resources(ctx)
-	for _, f := range base {
-		var md fwresource.MetadataResponse
-		f().Metadata(ctx, fwresource.MetadataRequest{ProviderTypeName: "sweb"}, &md)
-		if md.TypeName == "sweb_monitoring_check" {
-			return base // already registered by the orchestrator
-		}
-	}
-	return append(base, NewMonitoringCheckResource)
-}
-
-// ensure the wrapper still satisfies provider.Provider.
-var _ provider.Provider = (*monitoringCheckTestProvider)(nil)
 
 // TestAccMonitoringCheckResource exercises create → read → update (in-place edit
 // + enabled toggle) → import → destroy of a monitoring check against the mock
@@ -52,7 +16,7 @@ func TestAccMonitoringCheckResource(t *testing.T) {
 	defer mock.Close()
 
 	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: monitoringCheckTestFactories,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{ // create (enabled defaults to true)
 				Config: testAccMonitoringCheckConfig(mock.URL, "web", true),
