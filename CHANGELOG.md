@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.13.0...v0.14.0) (2026-07-14)
+
+
+### Features
+
+* make mailbox and database passwords write-only (importable) ([#51](https://github.com/sanchpet/terraform-provider-sweb/issues/51)) ([83e21ad](https://github.com/sanchpet/terraform-provider-sweb/commit/83e21add90a7a5a89fee301fa68d8de26937c767))
+
 ## [0.13.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.12.0...v0.13.0) (2026-07-14)
 
 
