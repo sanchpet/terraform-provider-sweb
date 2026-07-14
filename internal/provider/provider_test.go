@@ -15,8 +15,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 
 	"github.com/sanchpet/sweb-go-sdk/backup"
+	"github.com/sanchpet/sweb-go-sdk/balancer"
+	"github.com/sanchpet/sweb-go-sdk/dbaas"
 	"github.com/sanchpet/sweb-go-sdk/dns"
 	"github.com/sanchpet/sweb-go-sdk/flex"
+	"github.com/sanchpet/sweb-go-sdk/monitoring/checks"
+	"github.com/sanchpet/sweb-go-sdk/monitoring/contacts"
 	"github.com/sanchpet/sweb-go-sdk/sites"
 	"github.com/sanchpet/sweb-go-sdk/vh/cron"
 	"github.com/sanchpet/sweb-go-sdk/vh/hosting"
@@ -49,7 +53,20 @@ type mockSweb struct {
 	cronTasks     []cron.Task                // account-level crontab entries (identity = Task line)
 	databases     []hosting.Database         // account-level databases (identity = Name)
 	certs         []ssl.Certificate          // account-level SSL certificates (identity = Domain)
+	balancers     []balancer.Balancer        // cloud load balancers (identity = BillingID)
+	dbaas         []dbaas.Instance           // managed-database clusters (identity = BillingID)
+	checks        []checks.Check             // monitoring checks (identity = numeric id)
+	contacts      []contacts.Contact         // monitoring contacts (identity = numeric id)
+	seq2          int                        // secondary sequence for cloud-tier ids (avoids racing seq)
 }
+
+// cloudMockHandlers lets each cloud-tier resource's acceptance test register a
+// path-scoped JSON-RPC handler in its own file, instead of editing the shared
+// method switch (whose method names — index/create/edit/remove/getAvailableConfig
+// — collide across endpoints). A handler inspects (path, method) and returns
+// (result, true) when it owns the call, or (nil, false) to defer to the next
+// handler / the main switch. Registered from each test file's init().
+var cloudMockHandlers []func(m *mockSweb, path string, req rpcReq) (any, bool)
 
 // editDNS applies an add/del to the mock zone, mirroring the real API's per-type
 // index addressing (host in Domain for TXT, Name otherwise). okSentinel is the
@@ -169,6 +186,15 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Cloud-tier resources register path-scoped handlers (balancer/dbaas/monitoring)
+	// to avoid colliding with the shared method switch below.
+	for _, h := range cloudMockHandlers {
+		if res, ok := h(m, r.URL.Path, req); ok {
+			_ = json.NewEncoder(w).Encode(map[string]any{"result": res})
+			return
+		}
+	}
 
 	var result any
 	switch req.Method {
