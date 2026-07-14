@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	sweb "github.com/sanchpet/sweb-go-sdk"
@@ -43,14 +45,15 @@ func NewMailboxResource() resource.Resource { return &mailboxResource{} }
 type mailboxResource struct{ client *sweb.Client }
 
 type mailboxModel struct {
-	Domain   types.String `tfsdk:"domain"`
-	Name     types.String `tfsdk:"name"`
-	Password types.String `tfsdk:"password"`
-	Quota    types.Int64  `tfsdk:"quota"`
-	Antispam types.String `tfsdk:"antispam"`
-	SPF      types.Bool   `tfsdk:"spf"`
-	Comment  types.String `tfsdk:"comment"`
-	ID       types.String `tfsdk:"id"`
+	Domain            types.String `tfsdk:"domain"`
+	Name              types.String `tfsdk:"name"`
+	Password          types.String `tfsdk:"password"`
+	PasswordWOVersion types.Int64  `tfsdk:"password_wo_version"`
+	Quota             types.Int64  `tfsdk:"quota"`
+	Antispam          types.String `tfsdk:"antispam"`
+	SPF               types.Bool   `tfsdk:"spf"`
+	Comment           types.String `tfsdk:"comment"`
+	ID                types.String `tfsdk:"id"`
 }
 
 func (r *mailboxResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -76,9 +79,17 @@ func (r *mailboxResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				PlanModifiers: forceNewStr,
 			},
 			"password": schema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
-				Description: "The mailbox password. Updated in place via changeMailboxPassword.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "The mailbox password. Write-only — never stored in state, so importing a mailbox " +
+					"never needs it. Required when creating a mailbox; rotate an existing one by changing it " +
+					"together with password_wo_version.",
+			},
+			"password_wo_version": schema.Int64Attribute{
+				Optional: true,
+				Description: "Rotation trigger for the write-only password. Bump it (with a new password) to apply a " +
+					"password change; write-only values can't be diffed from state, so this nonce drives the update.",
 			},
 			"quota": schema.Int64Attribute{
 				Computed: true,
@@ -131,9 +142,19 @@ func (r *mailboxResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 	domain, name := plan.Domain.ValueString(), plan.Name.ValueString()
 
+	// password is write-only, so it lives in the config, not the plan/state.
+	password, ok := r.writeOnlyPassword(ctx, req.Config, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !ok {
+		resp.Diagnostics.AddError("Missing mailbox password", "password is required when creating a mailbox")
+		return
+	}
+
 	// createMbox sets the comment as part of creation; antispam and spf are applied
 	// afterwards through their own setters (createMbox takes neither).
-	if _, err := r.client.Mail.CreateMbox(ctx, domain, name, plan.Password.ValueString(), plan.Comment.ValueString()); err != nil {
+	if _, err := r.client.Mail.CreateMbox(ctx, domain, name, password, plan.Comment.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Failed to create mailbox", err.Error())
 		return
 	}
@@ -195,8 +216,20 @@ func (r *mailboxResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	// Diff each mutable field; call only the setter whose field changed. domain and
 	// name force replacement, so they never reach Update.
-	if !plan.Password.Equal(state.Password) {
-		if err := r.client.Mail.ChangeMailboxPassword(ctx, domain, name, plan.Password.ValueString()); err != nil {
+	//
+	// password is write-only (not in state), so it can't be diffed directly; a change
+	// to password_wo_version is the signal to read the new password from config and
+	// rotate it.
+	if !plan.PasswordWOVersion.Equal(state.PasswordWOVersion) {
+		password, ok := r.writeOnlyPassword(ctx, req.Config, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !ok {
+			resp.Diagnostics.AddError("Missing mailbox password", "password must be set when password_wo_version changes")
+			return
+		}
+		if err := r.client.Mail.ChangeMailboxPassword(ctx, domain, name, password); err != nil {
 			resp.Diagnostics.AddError("Failed to change mailbox password", err.Error())
 			return
 		}
@@ -280,6 +313,18 @@ func (r *mailboxResource) applyRemote(m *mailboxModel, mbox mail.Mailbox) {
 	m.Antispam = types.StringValue(antispamName(int(mbox.Antispam)))
 	m.SPF = types.BoolValue(mbox.SPF == 1)
 	m.Comment = types.StringValue(mbox.Comment)
+}
+
+// writeOnlyPassword reads the write-only password from the request config. Write-only
+// values never reach the plan or state, so they must be read from config directly. It
+// returns the value and whether it was set to a non-empty string.
+func (r *mailboxResource) writeOnlyPassword(ctx context.Context, config tfsdk.Config, diags *diag.Diagnostics) (string, bool) {
+	var pw types.String
+	diags.Append(config.GetAttribute(ctx, path.Root("password"), &pw)...)
+	if diags.HasError() || pw.IsNull() || pw.ValueString() == "" {
+		return "", false
+	}
+	return pw.ValueString(), true
 }
 
 func mailboxID(domain, name string) string { return domain + "/" + name }

@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	sweb "github.com/sanchpet/sweb-go-sdk"
@@ -36,6 +38,7 @@ type databaseResource struct{ client *sweb.Client }
 type databaseModel struct {
 	Name        types.String  `tfsdk:"name"`
 	Password    types.String  `tfsdk:"password"`
+	PasswordWOV types.Int64   `tfsdk:"password_wo_version"`
 	Comment     types.String  `tfsdk:"comment"`
 	Version     types.String  `tfsdk:"version"`
 	FullName    types.String  `tfsdk:"full_name"`
@@ -64,9 +67,17 @@ func (r *databaseResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				PlanModifiers: forceNewStr,
 			},
 			"password": schema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
-				Description: "The database user password. Updated in place via databaseMysqlChangePass.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "The database user password. Write-only — never stored in state, so importing a " +
+					"database never needs it. Required when creating; rotate an existing one by changing it " +
+					"together with password_wo_version.",
+			},
+			"password_wo_version": schema.Int64Attribute{
+				Optional: true,
+				Description: "Rotation trigger for the write-only password. Bump it (with a new password) to apply a " +
+					"change via databaseMysqlChangePass; write-only values can't be diffed from state.",
 			},
 			"comment": schema.StringAttribute{
 				Optional:    true,
@@ -130,9 +141,18 @@ func (r *databaseResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 	name := plan.Name.ValueString()
+	// password is write-only, so it lives in the config, not the plan/state.
+	password, ok := r.writeOnlyPassword(ctx, req.Config, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !ok {
+		resp.Diagnostics.AddError("Missing database password", "password is required when creating a database")
+		return
+	}
 	if err := r.client.HostingDB.MysqlCreate(ctx, hosting.MysqlCreateOptions{
 		Name:     name,
-		Password: plan.Password.ValueString(),
+		Password: password,
 		Comment:  plan.Comment.ValueString(),
 		Version:  plan.Version.ValueString(),
 	}); err != nil {
@@ -182,8 +202,17 @@ func (r *databaseResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 	// Post-create calls key on the API's stored full name, carried in state.
 	fullName := state.FullName.ValueString()
-	if !plan.Password.Equal(state.Password) {
-		if err := r.client.HostingDB.MysqlChangePass(ctx, fullName, plan.Password.ValueString()); err != nil {
+	// password is write-only (not in state); a bumped password_wo_version signals a rotation.
+	if !plan.PasswordWOV.Equal(state.PasswordWOV) {
+		password, ok := r.writeOnlyPassword(ctx, req.Config, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !ok {
+			resp.Diagnostics.AddError("Missing database password", "password must be set when password_wo_version changes")
+			return
+		}
+		if err := r.client.HostingDB.MysqlChangePass(ctx, fullName, password); err != nil {
 			resp.Diagnostics.AddError("Failed to change database password", err.Error())
 			return
 		}
@@ -243,6 +272,18 @@ func (r *databaseResource) findDatabase(ctx context.Context, name string) (hosti
 		}
 	}
 	return hosting.Database{}, false, nil
+}
+
+// writeOnlyPassword reads the write-only password from the request config. Write-only
+// values never reach the plan or state, so they must be read from config directly. It
+// returns the value and whether it was set to a non-empty string.
+func (r *databaseResource) writeOnlyPassword(ctx context.Context, config tfsdk.Config, diags *diag.Diagnostics) (string, bool) {
+	var pw types.String
+	diags.Append(config.GetAttribute(ctx, path.Root("password"), &pw)...)
+	if diags.HasError() || pw.IsNull() || pw.ValueString() == "" {
+		return "", false
+	}
+	return pw.ValueString(), true
 }
 
 // applyDatabase refreshes the computed/mutable fields from a live database.
