@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.12.0...v0.13.0) (2026-07-14)
+
+
+### Features
+
+* cloud-tier resources — balancer, dbaas_instance, monitoring_check, monitoring_contact ([#49](https://github.com/sanchpet/terraform-provider-sweb/issues/49)) ([66b94ee](https://github.com/sanchpet/terraform-provider-sweb/commit/66b94ee9150a7c6a4efb8c0d11abe456219e5831))
+
 ## [0.12.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.11.0...v0.12.0) (2026-07-13)
 
 
