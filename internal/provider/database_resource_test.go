@@ -19,7 +19,7 @@ func TestAccDatabaseResource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{ // create
-				Config: testAccDatabaseConfig(mock.URL, "S3cret!", "app db"),
+				Config: testAccDatabaseConfig(mock.URL, "S3cret!", 1, "app db"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("sweb_database.test", "name", "appdb"),
 					resource.TestCheckResourceAttr("sweb_database.test", "id", "appdb"),
@@ -28,27 +28,29 @@ func TestAccDatabaseResource(t *testing.T) {
 					resource.TestCheckResourceAttr("sweb_database.test", "version", "8.0"),
 					resource.TestCheckResourceAttr("sweb_database.test", "charset", "utf8mb4"),
 					resource.TestCheckResourceAttr("sweb_database.test", "login", "appdb"),
+					resource.TestCheckNoResourceAttr("sweb_database.test", "password"),
 				),
 			},
-			{ // update password + comment in place (no replacement)
-				Config: testAccDatabaseConfig(mock.URL, "N3wPass!", "renamed"),
+			{ // rotate password (bump version) + edit comment in place (no replacement)
+				Config: testAccDatabaseConfig(mock.URL, "N3wPass!", 2, "renamed"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("sweb_database.test", "password", "N3wPass!"),
+					resource.TestCheckResourceAttr("sweb_database.test", "password_wo_version", "2"),
 					resource.TestCheckResourceAttr("sweb_database.test", "comment", "renamed"),
+					resource.TestCheckNoResourceAttr("sweb_database.test", "password"),
 				),
 			},
-			{ // import by name; password is write-only, not API-reported
+			{ // import by name; password is write-only, so it never round-trips
 				ResourceName:            "sweb_database.test",
 				ImportState:             true,
 				ImportStateId:           "appdb",
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"password"},
+				ImportStateVerifyIgnore: []string{"password", "password_wo_version"},
 			},
 		},
 	})
 }
 
-func testAccDatabaseConfig(endpoint, password, comment string) string {
+func testAccDatabaseConfig(endpoint, password string, pwVersion int, comment string) string {
 	return fmt.Sprintf(`
 provider "sweb" {
   endpoint = %[1]q
@@ -56,9 +58,10 @@ provider "sweb" {
 }
 
 resource "sweb_database" "test" {
-  name     = "appdb"
-  password = %[2]q
-  comment  = %[3]q
+  name                = "appdb"
+  password            = %[2]q
+  password_wo_version = %[3]d
+  comment             = %[4]q
 }
-`, endpoint, password, comment)
+`, endpoint, password, pwVersion, comment)
 }

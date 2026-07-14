@@ -18,7 +18,8 @@ Manages a single shared-hosting mailbox on a mail domain (createMbox/dropMbox on
 resource "sweb_mailbox" "info" {
   domain   = "example.com"
   name     = "info"           # -> info@example.com
-  password = var.mailbox_password
+  password            = var.mailbox_password
+  password_wo_version = 1 # bump with a new password to rotate
   antispam = "medium"         # hard | medium | soft | off (default off)
   spf      = true             # enable SPF filtering
   comment  = "shared inbox"   # optional free-text note
@@ -32,12 +33,15 @@ resource "sweb_mailbox" "info" {
 
 - `domain` (String) The mail domain the mailbox belongs to (must already be on the account).
 - `name` (String) The mailbox local part — the label before @ (e.g. "info" for info@example.com).
-- `password` (String, Sensitive) The mailbox password. Updated in place via changeMailboxPassword.
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `antispam` (String) Antispam filter level: one of hard, medium, soft, off. Updated via updateAntispamState.
 - `comment` (String) Free-text comment on the mailbox. Set at creation and updated via updateComment.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The mailbox password. Write-only — never stored in state, so importing a mailbox never needs it. Required when creating a mailbox; rotate an existing one by changing it together with password_wo_version.
+- `password_wo_version` (Number) Rotation trigger for the write-only password. Bump it (with a new password) to apply a password change; write-only values can't be diffed from state, so this nonce drives the update.
 - `spf` (Boolean) Whether SPF filtering is enabled for the mailbox. Updated via changeMailboxSpf.
 
 ### Read-Only

@@ -17,7 +17,8 @@ Manages one shared-hosting MySQL database (databaseMysqlCreate/databaseMysqlDele
 # Identified by name; the API may store it under an account-prefixed full_name.
 resource "sweb_database" "app" {
   name     = "appdb"
-  password = var.database_password
+  password            = var.database_password
+  password_wo_version = 1 # bump with a new password to rotate
   comment  = "application database" # optional; updates in place
   # version = "8.0"                  # optional; API default when omitted (forces replace)
 }
@@ -29,11 +30,14 @@ resource "sweb_database" "app" {
 ### Required
 
 - `name` (String) The database name as supplied at creation (the create key and resource id).
-- `password` (String, Sensitive) The database user password. Updated in place via databaseMysqlChangePass.
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `comment` (String) Free-text comment. Set at creation and updated via databaseEditComment.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The database user password. Write-only — never stored in state, so importing a database never needs it. Required when creating; rotate an existing one by changing it together with password_wo_version.
+- `password_wo_version` (Number) Rotation trigger for the write-only password. Bump it (with a new password) to apply a change via databaseMysqlChangePass; write-only values can't be diffed from state.
 - `version` (String) MySQL version. Set at creation only (forces replacement); defaulted by the API when omitted.
 
 ### Read-Only
