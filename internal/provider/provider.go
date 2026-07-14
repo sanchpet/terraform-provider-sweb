@@ -100,7 +100,8 @@ func (p *swebProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewVPSResource, NewLocalNetworkResource, NewPTRRecordResource, NewBackupSettingsResource,
 		NewSubdomainResource, NewDomainRedirectResource, NewDNSRecordResource, NewDNSSRVRecordResource,
 		NewMailboxResource, NewDatabaseResource, NewSiteResource, NewCronTaskResource,
-		NewLetsEncryptResource,
+		NewLetsEncryptResource, NewBalancerResource, NewDBaaSInstanceResource,
+		NewMonitoringCheckResource, NewMonitoringContactResource,
 	}
 }
 

@@ -219,6 +219,43 @@ It is identified by the `domain` it covers; the issuance inputs
 toggles in place. Issuance is asynchronous, so `apply` waits for the certificate
 to appear (bounded by the `create` timeout, default 10m).
 
+### Cloud services (balancer, DBaaS, monitoring)
+
+Beyond VPS, the cloud panel exposes four more resources:
+
+- **`sweb_balancer`** — a cloud load balancer with nested `server`/`rule` blocks.
+  Ordering bills; provisioning is asynchronous (waits until idle). `datacenter`
+  and `plan_id` force replacement; the algorithm, toggles and backends update in
+  place. Identified by its billing id.
+- **`sweb_dbaas_instance`** — a managed-database cluster with nested `user` blocks.
+  Ordering bills and is asynchronous; `engine_type`/`engine_version` force
+  replacement, `plan_id`/`display_name`/users update in place. Identified by its
+  billing id.
+- **`sweb_monitoring_check`** — an uptime check (`type` forces replacement; target,
+  interval, contacts and options update in place; `enabled` toggles activation).
+- **`sweb_monitoring_contact`** — a notification contact (`email`/`phone`/`telegram`).
+
+```hcl
+resource "sweb_monitoring_contact" "ops" {
+  type  = "email"
+  value = "ops@example.com"
+  name  = "Ops"
+}
+
+resource "sweb_monitoring_check" "site" {
+  type        = "http"
+  target      = "https://example.com"
+  name        = "example.com"
+  interval    = 60
+  contact_ids = [sweb_monitoring_contact.ops.id]
+}
+```
+
+Like VPS, `sweb_balancer` and `sweb_dbaas_instance` correlate the newly ordered
+object via a List-diff (the create call returns no usable id) and serialize
+creates behind a mutex — so `apply` never orphans or mis-attributes a billed
+resource.
+
 ### Importing
 
 ```sh
