@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.1...v0.14.2) (2026-08-16)
+
+
+### Bug Fixes
+
+* bump sweb-go-sdk to v0.16.4 (stop retrying a rejected login) ([#60](https://github.com/sanchpet/terraform-provider-sweb/issues/60)) ([5cae925](https://github.com/sanchpet/terraform-provider-sweb/commit/5cae925f1add402e9a1807c231164ea856e49fc4))
+
 ## [0.14.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.0...v0.14.1) (2026-08-16)
 
 
