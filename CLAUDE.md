@@ -64,10 +64,8 @@ write tests that hit the real API — `create` bills and locks deletes for 24h.
 - **English** for all repo artifacts (code, comments, docs, commits, PRs).
 - Commits: small and focused; `--signoff` + `Assisted-By: Claude <noreply@anthropic.com>`
   (personal repo — the owner authors, Claude assists; not `Co-Authored-By`).
-- **Branch + PR**. Merging on green CI is delegated to the agent — merge and
-  report, don't ask per PR. Green CI is necessary, not sufficient: raise anything
-  whose risk sits outside what the pipeline checks (a public-interface break, a
-  behaviour change against the live API) instead of merging it.
+- **Branch + PR.** Who may merge is not stated here — it depends on the
+  contributor, and this file cannot know which one is reading it.
 - **Conventional Commits + release-please (BLOCKING):** commit / PR-title format is
   `<type>[scope]: <desc>` (`feat`→minor, `fix`→patch, `!` or `BREAKING CHANGE`→major).
   PRs are squash-merged, so the **PR title is the release commit** — CI enforces its
