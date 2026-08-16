@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.0...v0.14.1) (2026-08-16)
+
+
+### Bug Fixes
+
+* bump sweb-go-sdk to v0.16.3 (single login per apply) ([#57](https://github.com/sanchpet/terraform-provider-sweb/issues/57)) ([70f83dd](https://github.com/sanchpet/terraform-provider-sweb/commit/70f83dd18ccadfafb25af002388cc287678db7c6))
+
 ## [0.14.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.13.0...v0.14.0) (2026-07-14)
 
 
