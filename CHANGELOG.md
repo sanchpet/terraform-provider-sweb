@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.3](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.2...v0.14.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* serialize DNS zone mutations so a batch delete can't destroy a neighbour ([#65](https://github.com/sanchpet/terraform-provider-sweb/issues/65)) ([b33a940](https://github.com/sanchpet/terraform-provider-sweb/commit/b33a940ec1c5872cd0003554c4e688ef07bcc48b))
+* validate the mailbox password length at plan time ([#66](https://github.com/sanchpet/terraform-provider-sweb/issues/66)) ([cd4eefa](https://github.com/sanchpet/terraform-provider-sweb/commit/cd4eefacc7fb9bed917afe1fbf7cf824349f5173)), closes [#53](https://github.com/sanchpet/terraform-provider-sweb/issues/53)
+
 ## [0.14.2](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.1...v0.14.2) (2026-08-16)
 
 
