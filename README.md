@@ -65,6 +65,34 @@ resource "sweb_vps_local_network" "infra_01" {
 # → .local_ip / .mask / .mac (computed)
 ```
 
+### The `sweb_vps_ip` resource
+
+One **additional public IP** on a VPS (`add`/`remove` on `/vps/ip`), so a burnt
+exit address is rotated by replacing one resource instead of running the CLI and
+editing inventory by hand. SpaceWeb picks the address, so `ip` is computed:
+
+```hcl
+resource "sweb_vps_ip" "exit_ru" {
+  billing_id = "login_vps_18"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+# → .ip / .gateway / .netmask (computed)
+```
+
+```sh
+terraform apply -replace=sweb_vps_ip.exit_ru   # rotate the address
+```
+
+Ordering **bills**, and an IP **cannot be released within 24h** of being ordered:
+the provider surfaces that refusal as an error naming the wait and keeps the
+resource in state. `create_before_destroy` orders the replacement first, so a
+rotation does not hang on the old address being releasable. `sweb_vps.ip_count`
+still covers the IPs ordered with the VPS — mixing the two on one node makes
+`ip_count` drift, so pick one per node.
+
 ### The `sweb_plan` data source
 
 Resolves a configurator spec to a plan id, so HCL reads by resources instead of a
@@ -271,6 +299,12 @@ from the API). Notes:
 - `ssh_key` is create-only and not recoverable from the API; re-state it in HCL.
 - Use `terraform plan -generate-config-out=...` to materialise matching HCL.
 
+An additional IP is imported by `<billing_id>:<ip>` (a VPS can hold several):
+
+```sh
+terraform import sweb_vps_ip.exit_ru petrovpet2_vps_10:203.0.113.7
+```
+
 **Importing a whole DNS zone at once.** Rather than hand-write an `import {}` block
 per record, pipe a zone dump through the bundled `tf-dns-import` helper — it emits
 correct, unique ids for every record (round-robin, DKIM TXT, apex, SRV):
@@ -295,6 +329,9 @@ for the full walkthrough, including the multi-account credential gotcha.
   `datacenter`, `ssh_key` and `ip_count`.
 - **24h delete lock:** a freshly created VPS cannot be destroyed for 24h; the
   provider surfaces a clear error and keeps the resource in state.
+- **24h IP-release lock:** the same applies to an additional IP (`sweb_vps_ip`) —
+  and a plain replace destroys before it orders, so rotate with
+  `create_before_destroy` or wait the lock out.
 
 ## Development
 
