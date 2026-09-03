@@ -2,6 +2,8 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -70,4 +72,31 @@ resource "sweb_mailbox" "test" {
   comment             = %[6]q
 }
 `, endpoint, password, pwVersion, antispam, spf, comment)
+}
+
+// TestAccMailboxPasswordLength pins the API's 4-to-20-character password bound to
+// plan time. Without the validator the config plans clean and the API rejects it
+// with -32500 halfway through the apply, after other resources in the graph have
+// been created — and with a generated write-only password the error can't even
+// show what was sent.
+func TestAccMailboxPasswordLength(t *testing.T) {
+	mock := newMockSweb()
+	defer mock.Close()
+
+	tooLong := strings.Repeat("x", 21) // e.g. random_password with length = 32
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccMailboxConfig(mock.URL, tooLong, 1, "off", false, "too long"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)password.*length must be between 4 and 20`),
+			},
+			{
+				Config:      testAccMailboxConfig(mock.URL, "abc", 1, "off", false, "too short"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)password.*length must be between 4 and 20`),
+			},
+		},
+	})
 }
