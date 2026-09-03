@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
@@ -39,25 +40,29 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 // enough to exercise the full create → list-diff → poll → read → import → remove
 // lifecycle without touching (or billing) the real service.
 type mockSweb struct {
-	mu            sync.Mutex
-	nodes         []vps.VPS
-	seq           int
-	localAttached map[string]bool            // billingId → attached to the local network
-	ptr           map[string]string          // ip → PTR record
-	backupSet     map[string]backup.Settings // billingId → auto-backup schedule
-	subdomains    map[string][]string        // domain → subdomain machine labels
-	redirect      map[string]string          // domain → redirect URL
-	dnsRecords    map[string][]dns.Record    // domain → DNS zone records
-	mailboxes     map[string][]mail.Mailbox  // domain → mailboxes (Mbox is the full address)
-	sites         []sites.Site               // account-level websites (identity = DocRoot)
-	cronTasks     []cron.Task                // account-level crontab entries (identity = Task line)
-	databases     []hosting.Database         // account-level databases (identity = Name)
-	certs         []ssl.Certificate          // account-level SSL certificates (identity = Domain)
-	balancers     []balancer.Balancer        // cloud load balancers (identity = BillingID)
-	dbaas         []dbaas.Instance           // managed-database clusters (identity = BillingID)
-	checks        []checks.Check             // monitoring checks (identity = numeric id)
-	contacts      []contacts.Contact         // monitoring contacts (identity = numeric id)
-	seq2          int                        // secondary sequence for cloud-tier ids (avoids racing seq)
+	mu              sync.Mutex
+	nodes           []vps.VPS
+	seq             int
+	localAttached   map[string]bool            // billingId → attached to the local network
+	ptr             map[string]string          // ip → PTR record
+	backupSet       map[string]backup.Settings // billingId → auto-backup schedule
+	subdomains      map[string][]string        // domain → subdomain machine labels
+	redirect        map[string]string          // domain → redirect URL
+	dnsRecords      map[string][]dns.Record    // domain → DNS zone records
+	dnsVersion      map[string]int             // domain → zone mutation counter
+	dnsReadAt       map[string]int             // domain → zone version the last read served
+	dnsStaleDeletes []string                   // deletes issued against a zone that moved under them
+	dnsReadDelay    time.Duration              // test knob: latency on the zone read, to widen the race window
+	mailboxes       map[string][]mail.Mailbox  // domain → mailboxes (Mbox is the full address)
+	sites           []sites.Site               // account-level websites (identity = DocRoot)
+	cronTasks       []cron.Task                // account-level crontab entries (identity = Task line)
+	databases       []hosting.Database         // account-level databases (identity = Name)
+	certs           []ssl.Certificate          // account-level SSL certificates (identity = Domain)
+	balancers       []balancer.Balancer        // cloud load balancers (identity = BillingID)
+	dbaas           []dbaas.Instance           // managed-database clusters (identity = BillingID)
+	checks          []checks.Check             // monitoring checks (identity = numeric id)
+	contacts        []contacts.Contact         // monitoring contacts (identity = numeric id)
+	seq2            int                        // secondary sequence for cloud-tier ids (avoids racing seq)
 }
 
 // cloudMockHandlers lets each cloud-tier resource's acceptance test register a
@@ -68,9 +73,38 @@ type mockSweb struct {
 // handler / the main switch. Registered from each test file's init().
 var cloudMockHandlers []func(m *mockSweb, path string, req rpcReq) (any, bool)
 
-// editDNS applies an add/del to the mock zone, mirroring the real API's per-type
-// index addressing (host in Domain for TXT, Name otherwise). okSentinel is the
-// method's success value (integer 1 for editMx, boolean true for the rest).
+// dnsGroup maps a record type to the index space the API addresses it in. The
+// editMain types (A/AAAA/CNAME) share one sequence — a live zone numbers a CNAME
+// 2 after two A records — while each dedicated method (MX/TXT/NS/SRV) counts from
+// zero on its own.
+func dnsGroup(recType string) string {
+	switch t := strings.ToUpper(recType); t {
+	case "MX", "TXT", "NS", "SRV":
+		return t
+	default:
+		return "main"
+	}
+}
+
+// dnsZone returns a domain's records with each Index set to the record's current
+// position in its index group. The API numbers positionally, so removing a record
+// renumbers every record after it — the property that makes an index derived
+// before someone else's delete point at the wrong record.
+func (m *mockSweb) dnsZone(domain string) []dns.Record {
+	recs := append([]dns.Record(nil), m.dnsRecords[domain]...)
+	pos := map[string]int{}
+	for i := range recs {
+		g := dnsGroup(recs[i].Type)
+		recs[i].Index = flex.Int(pos[g])
+		pos[g]++
+	}
+	return recs
+}
+
+// editDNS applies an add/del to the mock zone, mirroring the real API's
+// positional index addressing (host in Domain for TXT, Name otherwise).
+// okSentinel is the method's success value (integer 1 for editMx, boolean true
+// for the rest).
 func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any) any {
 	var p struct {
 		Domain    string `json:"domain"`
@@ -93,27 +127,36 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 		m.dnsRecords = map[string][]dns.Record{}
 	}
 	if p.Action == "del" {
-		kept := m.dnsRecords[p.Domain][:0]
+		// A delete addressed by an index derived before an earlier delete shifted
+		// the zone removes the wrong record. The mock can't see the caller's
+		// intent, but it can see that the zone changed since the last read it
+		// served, which is exactly that hazard — record it for the test.
+		if m.dnsReadAt[p.Domain] < m.dnsVersion[p.Domain] {
+			m.dnsStaleDeletes = append(m.dnsStaleDeletes,
+				fmt.Sprintf("%s %s index %d", p.Domain, dnsGroup(p.Type), p.Index))
+		}
+		group, pos := dnsGroup(p.Type), 0
+		kept := make([]dns.Record, 0, len(m.dnsRecords[p.Domain]))
 		for _, rec := range m.dnsRecords[p.Domain] {
-			if strings.EqualFold(rec.Type, p.Type) && int(rec.Index) == p.Index {
+			if dnsGroup(rec.Type) != group {
+				kept = append(kept, rec)
 				continue
 			}
-			kept = append(kept, rec)
+			if pos != p.Index {
+				kept = append(kept, rec)
+			}
+			pos++
 		}
 		m.dnsRecords[p.Domain] = kept
+		m.dnsVersion[p.Domain]++
 		return okSentinel
 	}
 	rtype := fixedType
 	if rtype == "" {
 		rtype = strings.ToUpper(p.Type)
 	}
-	idx := 0
-	for _, rec := range m.dnsRecords[p.Domain] {
-		if strings.EqualFold(rec.Type, rtype) {
-			idx++
-		}
-	}
-	rec := dns.Record{Type: rtype, Value: p.Value, Index: flex.Int(idx), Priority: flex.Int(p.Priority)}
+	// Index is not stored: it is a position, derived on read by dnsZone.
+	rec := dns.Record{Type: rtype, Value: p.Value, Priority: flex.Int(p.Priority)}
 	switch rtype {
 	case "TXT":
 		host := p.SubDomain
@@ -135,6 +178,7 @@ func (m *mockSweb) editDNS(raw json.RawMessage, fixedType string, okSentinel any
 		rec.Name = p.Name
 	}
 	m.dnsRecords[p.Domain] = append(m.dnsRecords[p.Domain], rec)
+	m.dnsVersion[p.Domain]++
 	return okSentinel
 }
 
@@ -175,14 +219,33 @@ type rpcReq struct {
 }
 
 func newMockSweb() *httptest.Server {
-	m := &mockSweb{}
-	return httptest.NewServer(http.HandlerFunc(m.handle))
+	srv, _ := newMockSwebDelayedDNS(0)
+	return srv
+}
+
+// newMockSwebDelayedDNS is newMockSweb with an artificial latency on the DNS zone
+// read, plus a handle on the mock state for tests that must assert what the
+// server ended up holding rather than what Terraform believes.
+func newMockSwebDelayedDNS(dnsReadDelay time.Duration) (*httptest.Server, *mockSweb) {
+	m := &mockSweb{
+		dnsRecords:   map[string][]dns.Record{},
+		dnsVersion:   map[string]int{},
+		dnsReadAt:    map[string]int{},
+		dnsReadDelay: dnsReadDelay,
+	}
+	return httptest.NewServer(http.HandlerFunc(m.handle)), m
 }
 
 func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	var req rpcReq
 	_ = json.Unmarshal(body, &req)
+
+	// Held before the lock so concurrent readers overlap instead of queueing:
+	// the point is to serve them all the same pre-mutation zone.
+	if req.Method == "info" && m.dnsReadDelay > 0 && strings.HasSuffix(r.URL.Path, "/domains/dns") {
+		time.Sleep(m.dnsReadDelay)
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -493,7 +556,8 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 	case "info": // DNS zone (endpoint /domains/dns)
 		var p map[string]string
 		_ = json.Unmarshal(req.Params, &p)
-		recs := m.dnsRecords[p["domain"]]
+		m.dnsReadAt[p["domain"]] = m.dnsVersion[p["domain"]]
+		recs := m.dnsZone(p["domain"])
 		if recs == nil {
 			recs = []dns.Record{}
 		}

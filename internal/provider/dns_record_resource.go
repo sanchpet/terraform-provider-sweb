@@ -119,6 +119,7 @@ func (r *dnsRecordResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.AddError("Missing MX priority", "an MX record requires `priority`.")
 		return
 	}
+	defer lockDNSZone(plan.Domain.ValueString())()
 	if err := r.edit(ctx, dns.ActionAdd, plan, 0); err != nil {
 		resp.Diagnostics.AddError("Failed to create DNS record", err.Error())
 		return
@@ -153,7 +154,7 @@ func (r *dnsRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 }
 
 // Update never runs — every attribute forces replacement — but the framework
-// requires the method.
+// requires the method. It touches no API, so it needs no zone lock.
 func (r *dnsRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan dnsRecordModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -170,9 +171,14 @@ func (r *dnsRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// The whole read → derive index → write window is serial: the wire index is a
+	// position, so a concurrent delete elsewhere in the zone would shift it onto
+	// another record (see lockDNSZone).
+	defer lockDNSZone(state.Domain.ValueString())()
+
 	recs, err := r.client.DNS.Records(ctx, state.Domain.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to read DNS zone", err.Error())
+		resp.Diagnostics.AddError("Failed to read DNS zone before delete", err.Error())
 		return
 	}
 	rec, found := findDNSRecord(recs, state)
@@ -204,7 +210,8 @@ func (r *dnsRecordResource) ImportState(ctx context.Context, req resource.Import
 }
 
 // edit dispatches an add/remove to the SDK method for the record's type. For a
-// remove, index is the record's current wire index (re-derived by the caller).
+// remove, index is the record's current wire index, which the caller must
+// re-derive while holding the zone lock.
 func (r *dnsRecordResource) edit(ctx context.Context, action dns.Action, m dnsRecordModel, index int) error {
 	domain := m.Domain.ValueString()
 	name := apexNorm(m.Name.ValueString())

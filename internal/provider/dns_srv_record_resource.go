@@ -142,6 +142,7 @@ func (r *dnsSRVRecordResource) Create(ctx context.Context, req resource.CreateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	defer lockDNSZone(plan.Domain.ValueString())()
 	if err := r.client.DNS.EditSRV(ctx, plan.Domain.ValueString(), dns.ActionAdd, srvRecord(plan, 0)); err != nil {
 		resp.Diagnostics.AddError("Failed to create SRV record", err.Error())
 		return
@@ -175,7 +176,8 @@ func (r *dnsSRVRecordResource) Read(ctx context.Context, req resource.ReadReques
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update never runs — every attribute forces replacement.
+// Update never runs — every attribute forces replacement. It touches no API, so
+// it needs no zone lock.
 func (r *dnsSRVRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan dnsSRVRecordModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -192,9 +194,13 @@ func (r *dnsSRVRecordResource) Delete(ctx context.Context, req resource.DeleteRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// Serial across read → derive index → write: the index is a position and a
+	// concurrent delete would shift it onto another record (see lockDNSZone).
+	defer lockDNSZone(state.Domain.ValueString())()
+
 	rec, found, err := r.find(ctx, state)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to read DNS zone", err.Error())
+		resp.Diagnostics.AddError("Failed to read DNS zone before delete", err.Error())
 		return
 	}
 	if !found {
