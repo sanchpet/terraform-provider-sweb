@@ -1,11 +1,6 @@
 package provider
 
-import "sync"
-
-var (
-	dnsZoneLocksMu sync.Mutex
-	dnsZoneLocks   = map[string]*sync.Mutex{}
-)
+var dnsZoneLocks keyedMutex
 
 // lockDNSZone serializes mutating DNS operations on one zone and returns the
 // unlock function, so a caller writes `defer lockDNSZone(domain)()`.
@@ -24,15 +19,4 @@ var (
 // scope is one provider process, which covers a Terraform run; two runs against
 // the same zone at once remain unsafe, and the API offers no way to make them
 // safe (no conditional write, no stable record id).
-func lockDNSZone(domain string) func() {
-	dnsZoneLocksMu.Lock()
-	mu, ok := dnsZoneLocks[domain]
-	if !ok {
-		mu = &sync.Mutex{}
-		dnsZoneLocks[domain] = mu
-	}
-	dnsZoneLocksMu.Unlock()
-
-	mu.Lock()
-	return mu.Unlock
-}
+func lockDNSZone(domain string) func() { return dnsZoneLocks.lock(domain) }
