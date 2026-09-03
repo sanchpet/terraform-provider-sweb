@@ -82,9 +82,14 @@ func (r *mailboxResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional:  true,
 				Sensitive: true,
 				WriteOnly: true,
-				Description: "The mailbox password. Write-only — never stored in state, so importing a mailbox " +
-					"never needs it. Required when creating a mailbox; rotate an existing one by changing it " +
-					"together with password_wo_version.",
+				Description: "The mailbox password, 4 to 20 characters. Write-only — never stored in state, so " +
+					"importing a mailbox never needs it. Required when creating a mailbox; rotate an existing " +
+					"one by changing it together with password_wo_version.",
+				// The API caps the password at 20 characters and rejects anything
+				// longer with -32500, mid-apply. Validators run against config, so
+				// a write-only value is still checked — at plan time, before any
+				// resource in the graph has been created.
+				Validators: []validator.String{stringvalidator.LengthBetween(4, 20)},
 			},
 			"password_wo_version": schema.Int64Attribute{
 				Optional: true,
