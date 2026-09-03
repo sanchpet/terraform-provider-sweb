@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.3...v0.15.0) (2026-09-03)
+
+
+### Features
+
+* add the sweb_vps_ip resource for day-2 additional IPs ([#69](https://github.com/sanchpet/terraform-provider-sweb/issues/69)) ([c8f4f36](https://github.com/sanchpet/terraform-provider-sweb/commit/c8f4f36eaddf9a6cfb24286bbd5b9283a95777a7))
+
 ## [0.14.3](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.2...v0.14.3) (2026-09-03)
 
 
