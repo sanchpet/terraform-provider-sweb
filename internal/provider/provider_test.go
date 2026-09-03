@@ -20,6 +20,7 @@ import (
 	"github.com/sanchpet/sweb-go-sdk/dbaas"
 	"github.com/sanchpet/sweb-go-sdk/dns"
 	"github.com/sanchpet/sweb-go-sdk/flex"
+	swebip "github.com/sanchpet/sweb-go-sdk/ip"
 	"github.com/sanchpet/sweb-go-sdk/monitoring/checks"
 	"github.com/sanchpet/sweb-go-sdk/monitoring/contacts"
 	"github.com/sanchpet/sweb-go-sdk/sites"
@@ -43,26 +44,30 @@ type mockSweb struct {
 	mu              sync.Mutex
 	nodes           []vps.VPS
 	seq             int
-	localAttached   map[string]bool            // billingId → attached to the local network
-	ptr             map[string]string          // ip → PTR record
-	backupSet       map[string]backup.Settings // billingId → auto-backup schedule
-	subdomains      map[string][]string        // domain → subdomain machine labels
-	redirect        map[string]string          // domain → redirect URL
-	dnsRecords      map[string][]dns.Record    // domain → DNS zone records
-	dnsVersion      map[string]int             // domain → zone mutation counter
-	dnsReadAt       map[string]int             // domain → zone version the last read served
-	dnsStaleDeletes []string                   // deletes issued against a zone that moved under them
-	dnsReadDelay    time.Duration              // test knob: latency on the zone read, to widen the race window
-	mailboxes       map[string][]mail.Mailbox  // domain → mailboxes (Mbox is the full address)
-	sites           []sites.Site               // account-level websites (identity = DocRoot)
-	cronTasks       []cron.Task                // account-level crontab entries (identity = Task line)
-	databases       []hosting.Database         // account-level databases (identity = Name)
-	certs           []ssl.Certificate          // account-level SSL certificates (identity = Domain)
-	balancers       []balancer.Balancer        // cloud load balancers (identity = BillingID)
-	dbaas           []dbaas.Instance           // managed-database clusters (identity = BillingID)
-	checks          []checks.Check             // monitoring checks (identity = numeric id)
-	contacts        []contacts.Contact         // monitoring contacts (identity = numeric id)
-	seq2            int                        // secondary sequence for cloud-tier ids (avoids racing seq)
+	localAttached   map[string]bool             // billingId → attached to the local network
+	ptr             map[string]string           // ip → PTR record
+	backupSet       map[string]backup.Settings  // billingId → auto-backup schedule
+	subdomains      map[string][]string         // domain → subdomain machine labels
+	redirect        map[string]string           // domain → redirect URL
+	dnsRecords      map[string][]dns.Record     // domain → DNS zone records
+	dnsVersion      map[string]int              // domain → zone mutation counter
+	dnsReadAt       map[string]int              // domain → zone version the last read served
+	dnsStaleDeletes []string                    // deletes issued against a zone that moved under them
+	dnsReadDelay    time.Duration               // test knob: latency on the zone read, to widen the race window
+	mailboxes       map[string][]mail.Mailbox   // domain → mailboxes (Mbox is the full address)
+	sites           []sites.Site                // account-level websites (identity = DocRoot)
+	cronTasks       []cron.Task                 // account-level crontab entries (identity = Task line)
+	databases       []hosting.Database          // account-level databases (identity = Name)
+	certs           []ssl.Certificate           // account-level SSL certificates (identity = Domain)
+	balancers       []balancer.Balancer         // cloud load balancers (identity = BillingID)
+	dbaas           []dbaas.Instance            // managed-database clusters (identity = BillingID)
+	checks          []checks.Check              // monitoring checks (identity = numeric id)
+	contacts        []contacts.Contact          // monitoring contacts (identity = numeric id)
+	seq2            int                         // secondary sequence for cloud-tier ids (avoids racing seq)
+	publicIPs       map[string][]swebip.Address // billingId → additional public IPs (/vps/ip)
+	ipSeq           int                         // sequence for the addresses the mock assigns
+	ipBusyOrders    int                         // test knob: refuse this many orders with the busy -32500
+	ipRemoveLocked  int                         // test knob: refuse this many releases with the 24h-lock -32500
 }
 
 // cloudMockHandlers lets each cloud-tier resource's acceptance test register a
@@ -218,6 +223,14 @@ type rpcReq struct {
 	Params json.RawMessage `json:"params"`
 }
 
+// rpcError makes a path-scoped handler answer with a JSON-RPC error envelope
+// instead of a result — the only way to exercise the provider's API-error paths
+// (the 24h IP-release lock, the "another operation is running" refusal).
+type rpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
 func newMockSweb() *httptest.Server {
 	srv, _ := newMockSwebDelayedDNS(0)
 	return srv
@@ -253,10 +266,16 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 	// Cloud-tier resources register path-scoped handlers (balancer/dbaas/monitoring)
 	// to avoid colliding with the shared method switch below.
 	for _, h := range cloudMockHandlers {
-		if res, ok := h(m, r.URL.Path, req); ok {
-			_ = json.NewEncoder(w).Encode(map[string]any{"result": res})
-			return
+		res, ok := h(m, r.URL.Path, req)
+		if !ok {
+			continue
 		}
+		key := "result"
+		if _, isErr := res.(rpcError); isErr {
+			key = "error"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{key: res})
+		return
 	}
 
 	var result any
@@ -285,18 +304,6 @@ func (m *mockSweb) handle(w http.ResponseWriter, r *http.Request) {
 		result = map[string]bool{"ok": true}
 	case "index":
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/vps/ip"):
-			// IP inventory (endpoint /vps/ip): report the local IP if attached.
-			var p map[string]string
-			_ = json.Unmarshal(req.Params, &p)
-			local := []any{}
-			if m.localAttached[p["billingId"]] {
-				local = []any{map[string]string{"ip": "10.0.0.24", "mac": "00:16:3e:aa:bb:cc", "mask": "10.0.0.0/27"}}
-			}
-			result = map[string]any{
-				"ips": []any{}, "protected_ips": []any{}, "local_ip": local,
-				"vps": map[string]any{"billingId": p["billingId"], "isEmpty": "0", "ordered_ip_count": "1"},
-			}
 		case strings.HasSuffix(r.URL.Path, "/sites"):
 			result = m.sites // website inventory (endpoint /sites)
 		case strings.HasSuffix(r.URL.Path, "/vh/ssl"):
