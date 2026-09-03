@@ -40,7 +40,7 @@ resource "sweb_mailbox" "info" {
 
 - `antispam` (String) Antispam filter level: one of hard, medium, soft, off. Updated via updateAntispamState.
 - `comment` (String) Free-text comment on the mailbox. Set at creation and updated via updateComment.
-- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The mailbox password. Write-only — never stored in state, so importing a mailbox never needs it. Required when creating a mailbox; rotate an existing one by changing it together with password_wo_version.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The mailbox password, 4 to 20 characters. Write-only — never stored in state, so importing a mailbox never needs it. Required when creating a mailbox; rotate an existing one by changing it together with password_wo_version.
 - `password_wo_version` (Number) Rotation trigger for the write-only password. Bump it (with a new password) to apply a password change; write-only values can't be diffed from state, so this nonce drives the update.
 - `spf` (Boolean) Whether SPF filtering is enabled for the mailbox. Updated via changeMailboxSpf.
 
