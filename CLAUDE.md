@@ -18,6 +18,9 @@ maps the resource lifecycle and smooths three API leaks:
 - `internal/provider/vps_resource.go` — the `sweb_vps` resource (CRUD + import;
   in-place resize via `changePlan`, so `plan`/`cpu`/`ram`/`disk` no longer force
   replacement — grow-only on disk).
+- `internal/provider/vps_ip_resource.go` — `sweb_vps_ip`, one additional public IP
+  on a VPS (`add`/`remove`); the address is computed, so a burnt IP is rotated by
+  replacing the resource. Same List-diff + per-VPS mutex as the VPS create.
 - `internal/provider/vps_local_network_resource.go` — `sweb_vps_local_network`,
   attaches an existing VPS to the private network (`addLocal`, no re-create).
 - `internal/provider/plan_data_source.go` — the `sweb_plan` data source (resolve a
