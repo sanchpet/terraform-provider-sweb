@@ -65,8 +65,7 @@ write tests that hit the real API — `create` bills and locks deletes for 24h.
 ## Conventions
 
 - **English** for all repo artifacts (code, comments, docs, commits, PRs).
-- Commits: small and focused; `--signoff` + `Assisted-By: Claude <noreply@anthropic.com>`
-  (personal repo — the owner authors, Claude assists; not `Co-Authored-By`).
+- Commits: small and focused; `--signoff`.
 - **Branch + PR.** Who may merge is not stated here — it depends on the
   contributor, and this file cannot know which one is reading it.
 - **Conventional Commits + release-please (BLOCKING):** commit / PR-title format is
