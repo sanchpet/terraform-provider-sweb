@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.15.0...v0.15.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* bump sweb-go-sdk to v0.18.1 (decode live getAvailableConfig) ([#79](https://github.com/sanchpet/terraform-provider-sweb/issues/79)) ([37d2505](https://github.com/sanchpet/terraform-provider-sweb/commit/37d2505bd3776c981e0d4a708caa6a981771f22a))
+
 ## [0.15.0](https://github.com/sanchpet/terraform-provider-sweb/compare/v0.14.3...v0.15.0) (2026-09-03)
 
 
